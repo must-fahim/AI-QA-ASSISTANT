@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Ant Design generates style identifiers during server render. Cache Components
+  // rejects that non-deterministic render, so the app uses dynamic rendering.
+  cacheComponents: false,
+  partialPrefetching: false,
+  serverExternalPackages: ["playwright"],
   turbopack: {
     rules: {
       "*.css": {
