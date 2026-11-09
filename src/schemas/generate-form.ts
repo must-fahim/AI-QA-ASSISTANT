@@ -1,5 +1,5 @@
 import * as yup from "yup";
-import { LIMITS } from "@/constants/limits";
+import { clampTestCaseCount, LIMITS } from "@/constants/limits";
 import {
   APPLICATION_TYPES,
   DETAIL_LEVELS,
@@ -47,6 +47,9 @@ export const generateFormSchema: yup.ObjectSchema<GenerateFormValues> = yup.obje
     .number()
     .typeError("Enter the number of test cases.")
     .integer("Enter a whole number.")
+    .transform((value) =>
+      typeof value === "number" && Number.isFinite(value) ? clampTestCaseCount(value) : value,
+    )
     .min(LIMITS.testCaseCountMin, `Generate at least ${LIMITS.testCaseCountMin} test case.`)
     .max(LIMITS.testCaseCountMax, `Generate at most ${LIMITS.testCaseCountMax} test cases.`)
     .required("Enter the number of test cases."),

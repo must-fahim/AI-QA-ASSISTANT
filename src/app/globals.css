@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "antd/dist/reset.css" layer(base);
 
 :root {
   --background: #f5f5f7;
@@ -18,4 +19,38 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
+}
+
+.custom-scrollbar-with-spacing {
+  scrollbar-gutter: stable;
+  scrollbar-color: #e2e5ee #ffffff;
+  scrollbar-width: auto;
+}
+
+.custom-scrollbar-with-spacing::-webkit-scrollbar {
+  width: 18px;
+  height: 18px;
+}
+
+.custom-scrollbar-with-spacing::-webkit-scrollbar-thumb {
+  background: #e2e5ee;
+  border-radius: 999px;
+  border: 6px solid #ffffff;
+  background-clip: padding-box;
+}
+
+.custom-scrollbar-with-spacing::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+.custom-scrollbar-with-spacing::-webkit-scrollbar-corner {
+  background: #ffffff;
+}
+
+.Toastify__toast-container--top-right {
+  z-index: 12000 !important;
+  top: 12px !important;
+  right: 16px !important;
+  left: auto !important;
+  transform: none !important;
 }

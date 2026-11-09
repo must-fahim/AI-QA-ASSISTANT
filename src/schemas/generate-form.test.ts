@@ -51,9 +51,9 @@ describe("requirement form validation", () => {
     ).resolves.toMatchObject({ pageUrl: "https://stg.example.com/create-campaign" });
   });
 
-  it("limits the number of requested test cases", async () => {
-    await expect(generateFormSchema.validate({ ...valid, testCaseCount: 40 })).rejects.toThrow(
-      /at most 20/i,
-    );
+  it("caps the requested test cases at 15", async () => {
+    await expect(generateFormSchema.validate({ ...valid, testCaseCount: 40 })).resolves.toMatchObject({
+      testCaseCount: 15,
+    });
   });
 });

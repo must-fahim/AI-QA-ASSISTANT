@@ -4,6 +4,8 @@ export function createMemoryClient(): DbClient {
   const tables: Record<string, Array<Record<string, unknown>>> = {
     test_suites: [],
     test_cases: [],
+    saved_page_tests: [],
+    saved_page_test_pages: [],
   };
   let clock = 0;
 
@@ -103,6 +105,15 @@ class MemoryQuery implements QueryBuilder {
         const seen = new Set(table.map((existing) => `${String(existing.suite_id)}:${String(existing.test_case_id)}`));
         for (const row of inserted) {
           const key = `${String(row.suite_id)}:${String(row.test_case_id)}`;
+          if (seen.has(key)) return { data: null, error: { message: "duplicate", code: "23505" } };
+          seen.add(key);
+        }
+      }
+
+      if (this.table === "saved_page_test_pages") {
+        const seen = new Set(table.map((existing) => `${String(existing.test_id)}:${String(existing.url)}`));
+        for (const row of inserted) {
+          const key = `${String(row.test_id)}:${String(row.url)}`;
           if (seen.has(key)) return { data: null, error: { message: "duplicate", code: "23505" } };
           seen.add(key);
         }

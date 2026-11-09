@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { SuiteDetailView } from "@/components/history/SuiteDetailView";
 
-export const metadata: Metadata = { title: "Test suite · AI QA Assistant" };
+export const metadata: Metadata = { title: "Test suite" };
 
 export default async function HistoryDetailPage({
   params,

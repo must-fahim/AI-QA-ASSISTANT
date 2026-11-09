@@ -2,12 +2,14 @@
 
 import { Alert, App } from "antd";
 import { useCallback, useState } from "react";
+import { toast } from "react-toastify";
 import { ExampleCards } from "@/components/generate/ExampleCards";
 import { GenerateForm } from "@/components/generate/GenerateForm";
 import { SampleOutputModal } from "@/components/generate/SampleOutputModal";
 import { ResultsPanel } from "@/components/test-cases/ResultsPanel";
 import { TestCaseDrawer } from "@/components/test-cases/TestCaseDrawer";
 import { usePreferences } from "@/hooks/usePreferences";
+import { useSelectedModel } from "@/hooks/useSelectedModel";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import type {
   AiGenerationResult,
@@ -37,8 +39,9 @@ interface GenerationSession {
 }
 
 export function GenerateView() {
-  const { message, modal } = App.useApp();
+  const { modal } = App.useApp();
   const { preferences, ready } = usePreferences();
+  const [selectedModel] = useSelectedModel("");
   const [exampleRequest, setExampleRequest] = useState<{
     example: RequirementExample;
     token: number;
@@ -88,18 +91,18 @@ export function GenerateView() {
           suiteId: saved.id,
           cases: saved.testCases,
         });
-        message.success("Saved to test history.");
+        toast.success("Saved to test history.");
       } catch (saveError) {
         if (saveError instanceof ApiClientError && saveError.code === "DATABASE_NOT_CONFIGURED") {
-          message.warning("Generated, but the database is not configured. You can still review and export.");
+          toast.warning("Generated, but the database is not configured. You can still review and export.");
           return;
         }
-        message.error(saveError instanceof Error ? saveError.message : "The suite could not be saved.");
+        toast.error(saveError instanceof Error ? saveError.message : "The suite could not be saved.");
       } finally {
         setSaving(false);
       }
     },
-    [message],
+    [],
   );
 
   async function handleSubmit(values: GenerateFormValues) {
@@ -109,7 +112,7 @@ export function GenerateView() {
     try {
       const generated = await apiFetch<GenerateResponse>("/api/generate", {
         method: "POST",
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, model: selectedModel || undefined }),
       });
       const nextSession: GenerationSession = {
         values: {
@@ -159,9 +162,9 @@ export function GenerateView() {
         ),
       });
       setActiveCase(null);
-      message.success(next.recordId ? "Test case updated." : "Test case updated locally.");
+      toast.success(next.recordId ? "Test case updated." : "Test case updated locally.");
     } catch (saveError) {
-      message.error(saveError instanceof Error ? saveError.message : "The test case could not be updated.");
+      toast.error(saveError instanceof Error ? saveError.message : "The test case could not be updated.");
     } finally {
       setCaseSaving(false);
     }
@@ -188,7 +191,7 @@ export function GenerateView() {
               }
             : current,
         );
-        message.success("Test case deleted.");
+        toast.success("Test case deleted.");
       },
     });
   }

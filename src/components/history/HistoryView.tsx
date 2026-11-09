@@ -2,6 +2,7 @@
 
 import { App, Button, Card, Empty, Input, Select, Space, Table, Tag } from "antd";
 import Link from "next/link";
+import { toast } from "react-toastify";
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import { buildCsvFilename, buildTestCasesCsv } from "@/lib/csv/export-test-cases";
@@ -25,7 +26,7 @@ async function readHistory() {
 }
 
 export function HistoryView() {
-  const { message, modal } = App.useApp();
+  const { modal } = App.useApp();
   const [status, setStatus] = useState<PublicStatus | null>(null);
   const [suites, setSuites] = useState<TestSuiteRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,7 +83,7 @@ export function HistoryView() {
       const detail = await apiFetch<TestSuiteRecord>(`/api/test-suites/${suite.id}`);
       downloadCsv(buildCsvFilename(detail.title), buildTestCasesCsv(detail.testCases));
     } catch (exportError) {
-      message.error(exportError instanceof Error ? exportError.message : "The suite could not be exported.");
+      toast.error(exportError instanceof Error ? exportError.message : "The suite could not be exported.");
     }
   }
 
@@ -94,7 +95,7 @@ export function HistoryView() {
       okButtonProps: { danger: true },
       onOk: async () => {
         await apiFetch(`/api/test-suites/${suite.id}`, { method: "DELETE" });
-        message.success("Test suite deleted.");
+        toast.success("Test suite deleted.");
         applyHistory(await readHistory());
       },
     });

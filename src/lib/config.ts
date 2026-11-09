@@ -1,7 +1,10 @@
+import { modelsForHost, type AiModelOption } from "@/lib/models";
+
 export interface PublicStatus {
   aiConfigured: boolean;
   model: string | null;
   aiBaseHost: string | null;
+  availableModels: AiModelOption[];
   databaseConfigured: boolean;
   databaseReachable: boolean | null;
   databaseMessage: string | null;
@@ -42,6 +45,7 @@ export function readPublicStatus(database?: {
     aiConfigured: Boolean(ai.apiKey && ai.model),
     model: ai.model || null,
     aiBaseHost,
+    availableModels: modelsForHost(aiBaseHost, ai.model || null),
     databaseConfigured,
     databaseReachable: databaseConfigured ? (database?.reachable ?? null) : null,
     databaseMessage: databaseConfigured

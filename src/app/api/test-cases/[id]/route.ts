@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/current-user";
 import { jsonData, parseWithZod, readJson, withErrorHandling } from "@/lib/api/http";
 import { recordIdSchema, updateTestCaseSchema } from "@/schemas/records";
 import {
@@ -12,13 +13,15 @@ interface CaseContext {
 export const PATCH = withErrorHandling(async (request: Request, context: CaseContext) => {
   const { id } = await context.params;
   const recordId = parseWithZod(recordIdSchema, id);
+  const user = await requireUser();
   const patch = parseWithZod(updateTestCaseSchema, await readJson(request));
-  return jsonData(await updateTestCase(recordId, patch));
+  return jsonData(await updateTestCase(recordId, patch, undefined, user.id));
 });
 
 export const DELETE = withErrorHandling(async (_request: Request, context: CaseContext) => {
+  const user = await requireUser();
   const { id } = await context.params;
   const recordId = parseWithZod(recordIdSchema, id);
-  await deleteTestCase(recordId);
+  await deleteTestCase(recordId, undefined, user.id);
   return jsonData({ deleted: true });
 });

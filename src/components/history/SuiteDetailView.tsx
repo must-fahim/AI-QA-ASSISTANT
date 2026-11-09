@@ -2,6 +2,7 @@
 
 import { App, Button, Card, Empty, Input, Spin } from "antd";
 import Link from "next/link";
+import { toast } from "react-toastify";
 import { useEffect, useState } from "react";
 import { ResultsPanel } from "@/components/test-cases/ResultsPanel";
 import { TestCaseDrawer } from "@/components/test-cases/TestCaseDrawer";
@@ -9,7 +10,7 @@ import { ApiClientError, apiFetch } from "@/lib/api/client";
 import type { EditableTestCase, TestSuiteRecord } from "@/types/domain";
 
 export function SuiteDetailView({ id }: { id: string }) {
-  const { message, modal } = App.useApp();
+  const { modal } = App.useApp();
   const [suite, setSuite] = useState<TestSuiteRecord | null>(null);
   const [title, setTitle] = useState("");
   const [jiraTicketId, setJiraTicketId] = useState("");
@@ -57,9 +58,9 @@ export function SuiteDetailView({ id }: { id: string }) {
         body: JSON.stringify({ title, jiraTicketId: jiraTicketId || null }),
       });
       setSuite(updated);
-      message.success("Suite details saved.");
+      toast.success("Test suite details saved.");
     } catch (saveError) {
-      message.error(saveError instanceof Error ? saveError.message : "Suite details could not be saved.");
+      toast.error(saveError instanceof Error ? saveError.message : "Suite details could not be saved.");
     } finally {
       setSavingMeta(false);
     }
@@ -88,9 +89,9 @@ export function SuiteDetailView({ id }: { id: string }) {
         testCaseCount: suite.testCases.length,
       });
       setActiveCase(null);
-      message.success("Test case updated.");
+      toast.success("Test case updated.");
     } catch (saveError) {
-      message.error(saveError instanceof Error ? saveError.message : "The test case could not be updated.");
+      toast.error(saveError instanceof Error ? saveError.message : "The test case could not be updated.");
     } finally {
       setSavingCase(false);
     }
@@ -110,7 +111,7 @@ export function SuiteDetailView({ id }: { id: string }) {
           testCases: suite.testCases.filter((item) => item.recordId !== testCase.recordId),
           testCaseCount: suite.testCases.length - 1,
         });
-        message.success("Test case deleted.");
+        toast.success("Test case deleted.");
       },
     });
   }

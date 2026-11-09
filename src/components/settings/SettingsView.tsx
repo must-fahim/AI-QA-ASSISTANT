@@ -1,8 +1,9 @@
 "use client";
 
-import { Alert, App, Button, Card, Checkbox, InputNumber, Select, Tag } from "antd";
+import { Alert, Button, Card, Checkbox, InputNumber, Select, Tag } from "antd";
 import { useEffect, useState } from "react";
-import { LIMITS } from "@/constants/limits";
+import { toast } from "react-toastify";
+import { clampTestCaseCount, LIMITS } from "@/constants/limits";
 import { usePreferences } from "@/hooks/usePreferences";
 import { apiFetch } from "@/lib/api/client";
 import type { PublicStatus } from "@/lib/config";
@@ -15,7 +16,6 @@ import {
 } from "@/types/domain";
 
 export function SettingsView() {
-  const { message } = App.useApp();
   const { preferences, save } = usePreferences();
   const [status, setStatus] = useState<PublicStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +67,7 @@ export function SettingsView() {
             type="info"
             showIcon
             title="Supabase setup"
-            description="Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local, then run supabase/migrations/001_init.sql in the Supabase SQL editor. The service role key bypasses Row Level Security and must not use a NEXT_PUBLIC_ variable."
+            description="Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local, then run the SQL files in supabase/migrations. Google sign-in also needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. The service role key bypasses Row Level Security and must not use a NEXT_PUBLIC_ variable."
           />
         </div>
       </Card>
@@ -83,7 +83,8 @@ export function SettingsView() {
                 setDraft({
                   categories,
                   detailLevel,
-                  testCaseCount: typeof value === "number" ? value : LIMITS.testCaseCountMin,
+                  testCaseCount:
+                    typeof value === "number" ? clampTestCaseCount(value) : LIMITS.testCaseCountMin,
                 })
               }
             />
@@ -120,7 +121,7 @@ export function SettingsView() {
               disabled={!categories.length}
               onClick={() => {
                 save({ testCaseCount, categories, detailLevel });
-                message.success("Defaults saved in this browser.");
+                toast.success("Defaults saved in this browser.");
               }}
             >
               Save defaults

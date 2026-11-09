@@ -10,7 +10,7 @@ export const LIMITS = {
   stepTextMax: 1_000,
   tagMax: 40,
   testCaseCountMin: 1,
-  testCaseCountMax: 20,
+  testCaseCountMax: 15,
   maxPreconditions: 30,
   maxSteps: 40,
   maxTags: 20,
@@ -31,6 +31,10 @@ export const DEFAULT_PREFERENCES = {
 } as const;
 
 export const PREFERENCES_STORAGE_KEY = "ai-qa-assistant.preferences";
+
+export function clampTestCaseCount(value: number) {
+  return Math.min(LIMITS.testCaseCountMax, Math.max(LIMITS.testCaseCountMin, Math.trunc(value)));
+}
 
 export const PRIORITY_WEIGHT: Record<string, number> = {
   Critical: 4,

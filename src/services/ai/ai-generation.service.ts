@@ -15,6 +15,7 @@ type GenerateRequest = z.infer<typeof generateRequestSchema>;
 
 interface GenerationOptions {
   fetchImpl?: typeof fetch;
+  model?: string;
 }
 
 interface ChatCompletion {
@@ -32,8 +33,9 @@ export async function generateTestCases(
   }
 
   const fetchImpl = options.fetchImpl ?? fetch;
+  const model = options.model?.trim() || settings.model;
   const started = Date.now();
-  const content = await requestCompletion(settings, input, fetchImpl);
+  const content = await requestCompletion({ ...settings, model }, input, fetchImpl);
   const durationMs = Date.now() - started;
 
   let parsed: unknown;
@@ -57,7 +59,7 @@ export async function generateTestCases(
     );
   }
 
-  return { result: validated.data, model: settings.model, durationMs };
+  return { result: validated.data, model, durationMs };
 }
 
 async function requestCompletion(
