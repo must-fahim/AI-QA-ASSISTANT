@@ -1,4 +1,5 @@
 import { AppError } from "@/lib/errors";
+import { requireUser } from "@/lib/auth/current-user";
 import { ndjsonResponse } from "@/lib/api/ndjson";
 import { parseWithZod, readJson, withErrorHandling } from "@/lib/api/http";
 import { logger } from "@/lib/logger";
@@ -22,7 +23,8 @@ export const POST = withErrorHandling(async (request: Request, context: RetestCo
   const input = parseWithZod(retestRequestSchema, await readJson(request));
   assertRateLimit(`page-check:${getClientIp(request)}`, Date.now(), "Too many page checks. Try again shortly.");
 
-  const saved = await getSavedTest(id);
+  const user = await requireUser();
+  const saved = await getSavedTest(id, user.id);
   if (!saved) throw new AppError("Saved test was not found.", 404, "NOT_FOUND");
   await assertPublicHttpUrl(saved.siteUrl);
 
@@ -36,7 +38,7 @@ export const POST = withErrorHandling(async (request: Request, context: RetestCo
       },
       emit,
     );
-    await markSavedTestRun(id, outcome.results);
+    await markSavedTestRun(id, outcome.results, user.id);
     logger.info("saved page retest stored", { testId: id, checked: outcome.checked, failed: outcome.failed });
   });
 });

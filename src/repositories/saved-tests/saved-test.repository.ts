@@ -34,11 +34,12 @@ export interface SavedTestInput {
   pages: SavedPageDraft[];
 }
 
-export async function createSavedTest(input: SavedTestInput, client = resolveClient()) {
+export async function createSavedTest(input: SavedTestInput, userId: string, client = resolveClient()) {
   const pages = prepare(input.siteUrl, input.pages);
   const inserted = await client
     .from(TESTS)
     .insert({
+      user_id: userId,
       name: input.name.trim(),
       site_url: input.siteUrl,
       page_count: pages.length,
@@ -57,22 +58,22 @@ export async function createSavedTest(input: SavedTestInput, client = resolveCli
   return mapTest(test, asRows<PageRow>(stored.data));
 }
 
-export async function listSavedTests(client = resolveClient()): Promise<SavedTestSummary[]> {
-  const result = await client.from(TESTS).select("*").order("created_at", { ascending: false });
+export async function listSavedTests(userId: string, client = resolveClient()): Promise<SavedTestSummary[]> {
+  const result = await client.from(TESTS).select("*").eq("user_id", userId).order("created_at", { ascending: false });
   if (result.error) throw asDbError(result.error);
   return asRows<TestRow>(result.data).map((row) => mapSummary(row));
 }
 
-export async function getSavedTest(id: string, client = resolveClient()) {
-  const test = await client.from(TESTS).select("*").eq("id", id).maybeSingle();
+export async function getSavedTest(id: string, userId: string, client = resolveClient()) {
+  const test = await client.from(TESTS).select("*").eq("id", id).eq("user_id", userId).maybeSingle();
   if (test.error) throw asDbError(test.error);
   if (!test.data) return null;
   const pages = await pagesFor(client, id);
   return mapTest(test.data as TestRow, pages);
 }
 
-export async function updateSavedTest(id: string, input: SavedTestInput, client = resolveClient()) {
-  const existing = await getSavedTest(id, client);
+export async function updateSavedTest(id: string, input: SavedTestInput, userId: string, client = resolveClient()) {
+  const existing = await getSavedTest(id, userId, client);
   if (!existing) return null;
   const pages = prepare(input.siteUrl, input.pages);
   const previous = existing.pages.map((page) => ({
@@ -98,14 +99,15 @@ export async function updateSavedTest(id: string, input: SavedTestInput, client 
       page_count: pages.length,
     })
     .eq("id", id)
+    .eq("user_id", userId)
     .select("*")
     .single();
   if (updated.error || !updated.data) throw asDbError(updated.error ?? { message: "Update failed" });
   return mapTest(updated.data as TestRow, asRows<PageRow>(stored.data));
 }
 
-export async function deleteSavedTest(id: string, client = resolveClient()) {
-  const existing = await client.from(TESTS).select("id").eq("id", id).maybeSingle();
+export async function deleteSavedTest(id: string, userId: string, client = resolveClient()) {
+  const existing = await client.from(TESTS).select("id").eq("id", id).eq("user_id", userId).maybeSingle();
   if (existing.error) throw asDbError(existing.error);
   if (!existing.data) return false;
 
@@ -119,15 +121,17 @@ export async function deleteSavedTest(id: string, client = resolveClient()) {
 export async function markSavedTestRun(
   id: string,
   results: Array<{ url: string; status: "loaded" | "failed" }>,
+  userId: string,
   client = resolveClient(),
 ) {
-  const existing = await getSavedTest(id, client);
+  const existing = await getSavedTest(id, userId, client);
   if (!existing) return null;
 
   const updated = await client
     .from(TESTS)
     .update({ last_tested_at: new Date().toISOString() })
     .eq("id", id)
+    .eq("user_id", userId)
     .select("*")
     .single();
   if (updated.error || !updated.data) throw asDbError(updated.error ?? { message: "Update failed" });
@@ -141,7 +145,7 @@ export async function markSavedTestRun(
     if (page.error) throw asDbError(page.error);
   }
 
-  return getSavedTest(id, client);
+  return getSavedTest(id, userId, client);
 }
 
 function prepare(siteUrl: string, pages: SavedPageDraft[]) {

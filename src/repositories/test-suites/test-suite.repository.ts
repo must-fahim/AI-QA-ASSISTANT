@@ -18,10 +18,11 @@ import type { SuiteStats, TestSuiteRecord } from "@/types/domain";
 type CreateSuiteInput = z.infer<typeof createSuiteSchema>;
 type UpdateSuiteInput = z.infer<typeof updateSuiteSchema>;
 
-export async function createTestSuite(input: CreateSuiteInput, client = resolveClient()) {
+export async function createTestSuite(input: CreateSuiteInput, userId: string, client = resolveClient()) {
   const inserted = await client
     .from("test_suites")
     .insert({
+      user_id: userId,
       title: input.title,
       requirement: input.requirement,
       jira_ticket_id: input.jiraTicketId?.trim() ? input.jiraTicketId.trim() : null,
@@ -52,18 +53,21 @@ export async function createTestSuite(input: CreateSuiteInput, client = resolveC
   return mapSuiteRow(suite, testCases);
 }
 
-export async function listTestSuites(client = resolveClient()) {
+export async function listTestSuites(userId: string, client = resolveClient()) {
   const suites = await client
     .from("test_suites")
     .select("*")
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (suites.error) throw mapDbError(suites.error);
 
+  const ownedIds = new Set(asRows<SuiteRow>(suites.data).map((row) => row.id));
   const cases = await client.from("test_cases").select("id, suite_id, category");
   if (cases.error) throw mapDbError(cases.error);
 
   const counts = new Map<string, number>();
   for (const row of asRows<{ suite_id: string }>(cases.data)) {
+    if (!ownedIds.has(row.suite_id)) continue;
     counts.set(row.suite_id, (counts.get(row.suite_id) ?? 0) + 1);
   }
 
@@ -76,8 +80,8 @@ export async function listTestSuites(client = resolveClient()) {
   return { suites: records, stats: buildStats(records) };
 }
 
-export async function getTestSuite(id: string, client = resolveClient()) {
-  const suite = await client.from("test_suites").select("*").eq("id", id).maybeSingle();
+export async function getTestSuite(id: string, userId: string, client = resolveClient()) {
+  const suite = await client.from("test_suites").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
   if (suite.error) throw mapDbError(suite.error);
   if (!suite.data) return null;
 
@@ -91,14 +95,15 @@ export async function getTestSuite(id: string, client = resolveClient()) {
   return mapSuiteRow(suite.data as SuiteRow, asRows<CaseRow>(cases.data).map(mapCaseRow));
 }
 
-export async function updateTestSuite(id: string, patch: UpdateSuiteInput, client = resolveClient()) {
-  const existing = await getTestSuite(id, client);
+export async function updateTestSuite(id: string, patch: UpdateSuiteInput, userId: string, client = resolveClient()) {
+  const existing = await getTestSuite(id, userId, client);
   if (!existing) return null;
 
   const result = await client
     .from("test_suites")
     .update(toSuiteUpdate(patch))
     .eq("id", id)
+    .eq("user_id", userId)
     .select("*")
     .single();
   if (result.error || !result.data) throw mapDbError(result.error ?? { message: "Update failed" });
@@ -106,8 +111,8 @@ export async function updateTestSuite(id: string, patch: UpdateSuiteInput, clien
   return mapSuiteRow(result.data as SuiteRow, existing.testCases);
 }
 
-export async function deleteTestSuite(id: string, client = resolveClient()) {
-  const existing = await client.from("test_suites").select("id").eq("id", id).maybeSingle();
+export async function deleteTestSuite(id: string, userId: string, client = resolveClient()) {
+  const existing = await client.from("test_suites").select("id").eq("id", id).eq("user_id", userId).maybeSingle();
   if (existing.error) throw mapDbError(existing.error);
   if (!existing.data) return false;
 

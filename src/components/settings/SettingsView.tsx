@@ -67,7 +67,7 @@ export function SettingsView() {
             type="info"
             showIcon
             title="Supabase setup"
-            description="Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local, then run supabase/migrations/001_init.sql in the Supabase SQL editor. The service role key bypasses Row Level Security and must not use a NEXT_PUBLIC_ variable."
+            description="Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local, then run the SQL files in supabase/migrations. Google sign-in also needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. The service role key bypasses Row Level Security and must not use a NEXT_PUBLIC_ variable."
           />
         </div>
       </Card>

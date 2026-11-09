@@ -6,10 +6,11 @@ import { mapCaseRow, type CaseRow } from "@/repositories/rows";
 import type { TestCasePatch } from "@/lib/test-cases/edit";
 import { applyTestCasePatch } from "@/lib/test-cases/edit";
 
-export async function updateTestCase(id: string, patch: TestCasePatch, client = resolveClient()) {
+export async function updateTestCase(id: string, patch: TestCasePatch, client = resolveClient(), userId?: string) {
   const existing = await client.from("test_cases").select("*").eq("id", id).maybeSingle();
   if (existing.error) throw mapDbError(existing.error);
   if (!existing.data) throw notFound("Test case");
+  await assertSuiteOwner(client, (existing.data as CaseRow).suite_id, userId);
 
   const current = mapCaseRow(existing.data as CaseRow);
   const next = applyTestCasePatch(current, patch);
@@ -33,10 +34,11 @@ export async function updateTestCase(id: string, patch: TestCasePatch, client = 
   return mapCaseRow(result.data as CaseRow);
 }
 
-export async function deleteTestCase(id: string, client = resolveClient()) {
-  const existing = await client.from("test_cases").select("id").eq("id", id).maybeSingle();
+export async function deleteTestCase(id: string, client = resolveClient(), userId?: string) {
+  const existing = await client.from("test_cases").select("id, suite_id").eq("id", id).maybeSingle();
   if (existing.error) throw mapDbError(existing.error);
   if (!existing.data) throw notFound("Test case");
+  await assertSuiteOwner(client, (existing.data as { suite_id: string }).suite_id, userId);
 
   const result = await client.from("test_cases").delete().eq("id", id);
   if (result.error) throw mapDbError(result.error);
@@ -63,6 +65,13 @@ export function databaseNotConfigured() {
     503,
     "DATABASE_NOT_CONFIGURED",
   );
+}
+
+async function assertSuiteOwner(client: DbClient, suiteId: string, userId?: string) {
+  if (!userId) return;
+  const suite = await client.from("test_suites").select("id").eq("id", suiteId).eq("user_id", userId).maybeSingle();
+  if (suite.error) throw mapDbError(suite.error);
+  if (!suite.data) throw notFound("Test case");
 }
 
 function notFound(label: string) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { AccountMenu } from "@/components/layout/AccountMenu";
 import { ModelSelect } from "@/components/layout/ModelSelect";
 import { Button, Layout, Menu } from "antd";
 import {
@@ -47,6 +48,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       : NAVIGATION.some((item) => item.href === pathname)
         ? pathname
         : "/dashboard";
+  if (pathname === "/login") return <div className="min-h-dvh bg-[#f5f5f7]">{children}</div>;
+
   const title = pathname.startsWith("/history/")
     ? "Test suite"
     : pathname.endsWith("/edit")
@@ -107,15 +110,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex items-center gap-3">
             <ModelSelect />
-            <div className="hidden items-center gap-2 rounded-full bg-[#f6f1fb] py-1 pr-1 pl-3 sm:flex">
-              <div className="text-right">
-                <p className="m-0 text-[13px] font-semibold leading-4 text-[#1c1c1c]">QA Engineer</p>
-                <p className="m-0 text-[11px] leading-4 text-[#7c6a90]">Local workspace</p>
-              </div>
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#712DC8] text-[11px] font-semibold text-white">
-                QA
-              </span>
-            </div>
+            <AccountMenu />
           </div>
         </Header>
         <Content className="overflow-y-auto p-4 md:p-6">{children}</Content>

@@ -23,6 +23,7 @@ describe("saved page tests", () => {
     const client = createMemoryClient();
     const created = await createSavedTest(
       { name: "MUST Company", siteUrl: site, pages: pages(12) },
+      "user-a",
       client,
     );
     expect(created.pageCount).toBe(12);
@@ -40,6 +41,7 @@ describe("saved page tests", () => {
           { name: "FAQ", url: "/faq", source: "manual" },
         ],
       },
+      "user-a",
       client,
     );
     expect(updated?.name).toBe("MUST Company Site");
@@ -47,12 +49,13 @@ describe("saved page tests", () => {
     expect(updated?.pages.filter((page) => page.source === "discovered")).toHaveLength(12);
     expect(updated?.pages.filter((page) => page.source === "manual")).toHaveLength(3);
 
-    const reloaded = await getSavedTest(created.id, client);
+    const reloaded = await getSavedTest(created.id, "user-a", client);
     expect(reloaded?.pages.map((page) => page.url)).toHaveLength(15);
 
     const tested = await markSavedTestRun(
       created.id,
       [{ url: "https://example.com/page-1", status: "loaded" }],
+      "user-a",
       client,
     );
     expect(tested?.lastTestedAt).toBeTruthy();
@@ -68,12 +71,14 @@ describe("saved page tests", () => {
             { name: "Two", url: "https://example.com/pricing/", source: "manual" },
           ],
         },
+        "user-a",
         client,
       ),
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
 
-    expect(await deleteSavedTest(created.id, client)).toBe(true);
-    expect(await getSavedTest(created.id, client)).toBeNull();
+    expect(await getSavedTest(created.id, "user-b", client)).toBeNull();
+    expect(await deleteSavedTest(created.id, "user-a", client)).toBe(true);
+    expect(await getSavedTest(created.id, "user-a", client)).toBeNull();
     const leftover = await client.from("saved_page_test_pages").select("*").eq("test_id", created.id);
     expect(leftover.data).toEqual([]);
   });
