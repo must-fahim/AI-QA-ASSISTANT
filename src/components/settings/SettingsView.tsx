@@ -2,7 +2,7 @@
 
 import { Alert, App, Button, Card, Checkbox, InputNumber, Select, Tag } from "antd";
 import { useEffect, useState } from "react";
-import { LIMITS } from "@/constants/limits";
+import { clampTestCaseCount, LIMITS } from "@/constants/limits";
 import { usePreferences } from "@/hooks/usePreferences";
 import { apiFetch } from "@/lib/api/client";
 import type { PublicStatus } from "@/lib/config";
@@ -83,7 +83,8 @@ export function SettingsView() {
                 setDraft({
                   categories,
                   detailLevel,
-                  testCaseCount: typeof value === "number" ? value : LIMITS.testCaseCountMin,
+                  testCaseCount:
+                    typeof value === "number" ? clampTestCaseCount(value) : LIMITS.testCaseCountMin,
                 })
               }
             />

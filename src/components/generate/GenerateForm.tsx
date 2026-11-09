@@ -5,7 +5,7 @@ import { Button, Checkbox, Input, InputNumber, Select } from "antd";
 import { Sparkles } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { LIMITS } from "@/constants/limits";
+import { clampTestCaseCount, LIMITS } from "@/constants/limits";
 import { generateFormSchema } from "@/schemas/generate-form";
 import {
   APPLICATION_TYPES,
@@ -222,7 +222,7 @@ export function GenerateForm({
                   min={LIMITS.testCaseCountMin}
                   max={LIMITS.testCaseCountMax}
                   value={field.value}
-                  onChange={(value) => field.onChange(typeof value === "number" ? value : LIMITS.testCaseCountMin)}
+                  onChange={(value) => field.onChange(clampTestCaseCount(value))}
                 />
               </Field>
             )}

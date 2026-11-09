@@ -8,6 +8,7 @@ import { SampleOutputModal } from "@/components/generate/SampleOutputModal";
 import { ResultsPanel } from "@/components/test-cases/ResultsPanel";
 import { TestCaseDrawer } from "@/components/test-cases/TestCaseDrawer";
 import { usePreferences } from "@/hooks/usePreferences";
+import { useSelectedModel } from "@/hooks/useSelectedModel";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import type {
   AiGenerationResult,
@@ -39,6 +40,7 @@ interface GenerationSession {
 export function GenerateView() {
   const { message, modal } = App.useApp();
   const { preferences, ready } = usePreferences();
+  const [selectedModel] = useSelectedModel("");
   const [exampleRequest, setExampleRequest] = useState<{
     example: RequirementExample;
     token: number;
@@ -109,7 +111,7 @@ export function GenerateView() {
     try {
       const generated = await apiFetch<GenerateResponse>("/api/generate", {
         method: "POST",
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, model: selectedModel || undefined }),
       });
       const nextSession: GenerationSession = {
         values: {

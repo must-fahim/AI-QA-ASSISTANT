@@ -1,5 +1,6 @@
 "use client";
 
+import { ModelSelect } from "@/components/layout/ModelSelect";
 import { Button, Layout, Menu } from "antd";
 import {
   History,
@@ -91,6 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <h1 className="m-0 text-base font-semibold text-[#1c1c1c]">{title}</h1>
           </div>
           <div className="flex items-center gap-3">
+            <ModelSelect />
             <div className="text-right leading-4">
               <p className="text-sm font-medium text-[#1c1c1c]">QA Engineer</p>
               <p className="text-xs text-[#6b7280]">Local workspace</p>

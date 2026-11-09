@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LIMITS } from "@/constants/limits";
+import { clampTestCaseCount, LIMITS } from "@/constants/limits";
 import {
   APPLICATION_TYPES,
   DETAIL_LEVELS,
@@ -15,7 +15,11 @@ export const configurationSchema = z.object({
   applicationType: z.enum(APPLICATION_TYPES),
   priority: z.enum(PRIORITIES),
   categories: z.array(z.enum(TESTING_CATEGORIES)).min(1),
-  testCaseCount: z.number().int().min(LIMITS.testCaseCountMin).max(LIMITS.testCaseCountMax),
+  testCaseCount: z
+    .number()
+    .int()
+    .transform(clampTestCaseCount)
+    .pipe(z.number().int().min(LIMITS.testCaseCountMin).max(LIMITS.testCaseCountMax)),
   detailLevel: z.enum(DETAIL_LEVELS),
   environment: optionalText(LIMITS.featureNameMax),
   browserDevice: optionalText(LIMITS.featureNameMax),
@@ -31,10 +35,15 @@ export const generateRequestSchema = z
     applicationType: z.enum(APPLICATION_TYPES),
     priority: z.enum(PRIORITIES),
     categories: z.array(z.enum(TESTING_CATEGORIES)).min(1),
-    testCaseCount: z.number().int().min(LIMITS.testCaseCountMin).max(LIMITS.testCaseCountMax),
+    testCaseCount: z
+      .number()
+      .int()
+      .transform(clampTestCaseCount)
+      .pipe(z.number().int().min(LIMITS.testCaseCountMin).max(LIMITS.testCaseCountMax)),
     detailLevel: z.enum(DETAIL_LEVELS),
     environment: optionalText(LIMITS.featureNameMax),
     browserDevice: optionalText(LIMITS.featureNameMax),
+    model: z.string().trim().max(120).optional(),
     pageUrl: z.string().trim().max(2_000).optional(),
     loginEmail: z.string().trim().max(200).optional(),
     loginPassword: z.string().max(200).optional(),

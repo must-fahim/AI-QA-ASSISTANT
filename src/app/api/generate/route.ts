@@ -1,6 +1,8 @@
 import { jsonData, parseWithZod, readJson, withErrorHandling } from "@/lib/api/http";
 import { assertRateLimit, getClientIp } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
+import { readAiSettings } from "@/lib/config";
+import { modelsForHost, resolveRequestedModel } from "@/lib/models";
 import { generateRequestSchema } from "@/schemas/records";
 import { generateTestCases } from "@/services/ai/ai-generation.service";
 import { composeRequirement } from "@/services/page-visit/compose-requirement";
@@ -19,13 +21,24 @@ export const POST = withErrorHandling(async (request: Request) => {
       })
     : null;
   const requirement = composeRequirement(input.requirement, observation);
-  const generated = await generateTestCases({
-    ...input,
-    requirement,
-    pageUrl: undefined,
-    loginEmail: undefined,
-    loginPassword: undefined,
-  });
+  const ai = readAiSettings();
+  let host: string | null = null;
+  try {
+    host = new URL(ai.baseUrl).host;
+  } catch {
+    host = null;
+  }
+  const model = resolveRequestedModel(input.model, modelsForHost(host, ai.model), ai.model);
+  const generated = await generateTestCases(
+    {
+      ...input,
+      requirement,
+      pageUrl: undefined,
+      loginEmail: undefined,
+      loginPassword: undefined,
+    },
+    { model },
+  );
   logger.info("generated test cases", {
     model: generated.model,
     count: generated.result.testCases.length,

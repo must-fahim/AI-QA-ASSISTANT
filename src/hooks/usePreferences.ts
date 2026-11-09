@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { DEFAULT_PREFERENCES, PREFERENCES_STORAGE_KEY } from "@/constants/limits";
+import { DEFAULT_PREFERENCES, LIMITS, PREFERENCES_STORAGE_KEY } from "@/constants/limits";
 import {
   DETAIL_LEVELS,
   TESTING_CATEGORIES,
@@ -59,7 +59,7 @@ function parsePreferences(raw: string): AppPreferences | null {
   try {
     const value = JSON.parse(raw) as Partial<AppPreferences>;
     const testCaseCount = Number(value.testCaseCount);
-    if (!Number.isInteger(testCaseCount) || testCaseCount < 1 || testCaseCount > 20) return null;
+    if (!Number.isInteger(testCaseCount) || testCaseCount < LIMITS.testCaseCountMin) return null;
     if (!Array.isArray(value.categories)) return null;
     const categories = value.categories.filter((item): item is TestingCategory =>
       (TESTING_CATEGORIES as readonly string[]).includes(item),
@@ -67,7 +67,7 @@ function parsePreferences(raw: string): AppPreferences | null {
     if (!categories.length) return null;
     if (!(DETAIL_LEVELS as readonly string[]).includes(value.detailLevel ?? "")) return null;
     return {
-      testCaseCount,
+      testCaseCount: Math.min(testCaseCount, LIMITS.testCaseCountMax),
       categories,
       detailLevel: value.detailLevel as DetailLevel,
     };
