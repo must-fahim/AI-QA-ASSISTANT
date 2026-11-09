@@ -5,23 +5,34 @@ import { readAiSettings } from "@/lib/config";
 import { modelsForHost, resolveRequestedModel } from "@/lib/models";
 import { generateRequestSchema } from "@/schemas/records";
 import { generateTestCases } from "@/services/ai/ai-generation.service";
+import { assertPublicHttpUrl } from "@/lib/page-visit/public-url";
 import { composeRequirement } from "@/services/page-visit/compose-requirement";
 import { visitPage } from "@/services/page-visit/visit-page";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export const POST = withErrorHandling(async (request: Request) => {
   const input = parseWithZod(generateRequestSchema, await readJson(request));
   assertRateLimit(`generate:${getClientIp(request)}`);
-  const observation = input.pageUrl
-    ? await visitPage({
-        url: input.pageUrl,
-        loginEmail: input.loginEmail,
-        loginPassword: input.loginPassword,
-      })
-    : null;
-  const requirement = composeRequirement(input.requirement, observation);
+  if (input.pageUrl && input.step !== "generate") {
+    await assertPublicHttpUrl(input.pageUrl);
+    const observation = await visitPage({
+      url: input.pageUrl,
+      loginEmail: input.loginEmail,
+      loginPassword: input.loginPassword,
+    });
+    return jsonData({
+      step: "visit",
+      observedRequirement: composeRequirement(input.requirement, observation),
+      pageVisit: {
+        finalUrl: observation.finalUrl,
+        title: observation.title,
+        controlCount: observation.controls.length,
+      },
+    });
+  }
+  const requirement = input.requirement;
   const ai = readAiSettings();
   let host: string | null = null;
   try {
@@ -37,6 +48,7 @@ export const POST = withErrorHandling(async (request: Request) => {
       pageUrl: undefined,
       loginEmail: undefined,
       loginPassword: undefined,
+      step: undefined,
     },
     { model },
   );
@@ -45,7 +57,7 @@ export const POST = withErrorHandling(async (request: Request) => {
     count: generated.result.testCases.length,
     durationMs: generated.durationMs,
     requirementLength: requirement.length,
-    visitedPage: observation ? new URL(observation.finalUrl).host : null,
+    visitedPage: null,
   });
 
   return jsonData({
@@ -53,13 +65,7 @@ export const POST = withErrorHandling(async (request: Request) => {
     model: generated.model,
     generationDurationMs: generated.durationMs,
     persisted: false,
-    observedRequirement: observation ? requirement : null,
-    pageVisit: observation
-      ? {
-          finalUrl: observation.finalUrl,
-          title: observation.title,
-          controlCount: observation.controls.length,
-        }
-      : null,
+    observedRequirement: null,
+    pageVisit: null,
   });
 });
