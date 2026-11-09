@@ -4,6 +4,7 @@ import { ModelSelect } from "@/components/layout/ModelSelect";
 import { Button, Layout, Menu } from "antd";
 import {
   History,
+  Bookmark,
   LayoutDashboard,
   Menu as MenuIcon,
   ScanSearch,
@@ -21,6 +22,7 @@ const NAVIGATION: Array<{ href: string; label: string; icon: LucideIcon }> = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/generate", label: "Generate Test Cases", icon: Sparkles },
   { href: "/page-check", label: "Page Check", icon: ScanSearch },
+  { href: "/saved-tests", label: "Saved Tests", icon: Bookmark },
   { href: "/history", label: "Test History", icon: History },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -29,6 +31,7 @@ const TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/generate": "Generate Test Cases",
   "/page-check": "Page Check",
+  "/saved-tests": "Saved Tests",
   "/history": "Test History",
   "/settings": "Settings",
 };
@@ -39,10 +42,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobile, setMobile] = useState(false);
   const selected = pathname.startsWith("/history")
     ? "/history"
-    : NAVIGATION.some((item) => item.href === pathname)
-      ? pathname
-      : "/dashboard";
-  const title = pathname.startsWith("/history/") ? "Test suite" : (TITLES[selected] ?? "AI QA Assistant");
+    : pathname.startsWith("/saved-tests")
+      ? "/saved-tests"
+      : NAVIGATION.some((item) => item.href === pathname)
+        ? pathname
+        : "/dashboard";
+  const title = pathname.startsWith("/history/")
+    ? "Test suite"
+    : pathname.endsWith("/edit")
+      ? "Edit saved test"
+      : pathname.startsWith("/saved-tests/")
+        ? "Saved test"
+        : (TITLES[selected] ?? "AI QA Assistant");
 
   return (
     <Layout className="min-h-screen bg-[#f5f5f7]">
@@ -92,11 +103,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               icon={<MenuIcon size={18} />}
               onClick={() => setCollapsed((current) => !current)}
             />
-            <h1 className="m-0 text-base font-semibold text-[#1c1c1c]">{title}</h1>
+            <h1 className="m-0 truncate text-base font-semibold whitespace-nowrap text-[#1c1c1c]">{title}</h1>
           </div>
           <div className="flex items-center gap-3">
             <ModelSelect />
-            <div className="text-right leading-4">
+            <div className="hidden text-right leading-4 sm:block">
               <p className="text-sm font-medium text-[#1c1c1c]">QA Engineer</p>
               <p className="text-xs text-[#6b7280]">Local workspace</p>
             </div>

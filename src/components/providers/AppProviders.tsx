@@ -1,9 +1,15 @@
 "use client";
 
 import { App, ConfigProvider } from "antd";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Toaster } from "react-hot-toast";
 
 export function AppProviders({ children }: { children: ReactNode }) {
+  const [toastsReady, setToastsReady] = useState(false);
+  useEffect(() => {
+    setToastsReady(true);
+  }, []);
+
   return (
     <ConfigProvider
       theme={{
@@ -36,7 +42,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
         },
       }}
     >
-      <App>{children}</App>
+      <App>
+        {toastsReady ? <Toaster position="top-right" containerStyle={{ top: 72 }} /> : null}
+        {children}
+      </App>
     </ConfigProvider>
   );
 }
