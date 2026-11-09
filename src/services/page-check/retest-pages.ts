@@ -2,7 +2,7 @@ import type { Page } from "playwright";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { assertPublicHttpUrl } from "@/lib/page-visit/public-url";
-import { launchChromium, safeMessage, signIn } from "@/services/page-visit/browser";
+import { closeBrowser, launchChromium, safeMessage, signIn } from "@/services/page-visit/browser";
 import { classifyPageLoad, type PageLoadState } from "@/services/page-check/classify-page";
 import { pagePath } from "@/services/page-check/links";
 import type { PageCheckEvent } from "@/services/page-check/types";
@@ -25,7 +25,11 @@ export interface RetestOutcome {
   results: Array<{ url: string; status: PageLoadState }>;
 }
 
-export async function retestSavedPages(input: RetestInput, emit: (event: PageCheckEvent) => void): Promise<RetestOutcome> {
+export async function retestSavedPages(
+  input: RetestInput,
+  emit: (event: PageCheckEvent) => void,
+  persist?: (result: { url: string; status: PageLoadState }) => Promise<void>,
+): Promise<RetestOutcome> {
   const start = await assertPublicHttpUrl(input.siteUrl);
   const email = input.loginEmail?.trim() ?? "";
   const password = input.loginPassword ?? "";
@@ -42,6 +46,7 @@ export async function retestSavedPages(input: RetestInput, emit: (event: PageChe
 
     for (const item of input.pages) {
       emit({ type: "checking", url: item.url, name: item.name, path: pagePath(item.url) });
+      let recorded: { url: string; status: PageLoadState } | null = null;
       try {
         const response = await page.goto(item.url, { waitUntil: "domcontentloaded", timeout: 20_000 });
         await waitForContent(page);
@@ -58,7 +63,8 @@ export async function retestSavedPages(input: RetestInput, emit: (event: PageChe
         const snapshot = await readSnapshot(page);
         const outcome = outcomeFor(response?.status() ?? null, snapshot);
         if (outcome.status === "failed") failed += 1;
-        results.push({ url: item.url, status: outcome.status });
+        recorded = { url: item.url, status: outcome.status };
+        results.push(recorded);
         emit({
           type: "result",
           url: item.url,
@@ -71,7 +77,8 @@ export async function retestSavedPages(input: RetestInput, emit: (event: PageChe
         if (error instanceof AppError && error.code === "PAGE_LOGIN_FAILED") throw error;
         logger.error("saved page retest failed", { message: safeMessage(error, password) });
         failed += 1;
-        results.push({ url: item.url, status: "failed" });
+        recorded = { url: item.url, status: "failed" };
+        results.push(recorded);
         emit({
           type: "result",
           url: item.url,
@@ -81,13 +88,14 @@ export async function retestSavedPages(input: RetestInput, emit: (event: PageChe
           detail: "Failed to load",
         });
       }
+      if (recorded && persist) await persist(recorded);
     }
 
     logger.info("saved page retest finished", { host: start.host, checked: results.length, failed });
     emit({ type: "done", checked: results.length, failed, truncated: false });
     return { checked: results.length, failed, results };
   } finally {
-    await browser.close();
+    await closeBrowser(browser);
   }
 }
 

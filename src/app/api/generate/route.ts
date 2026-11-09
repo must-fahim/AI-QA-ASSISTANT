@@ -8,6 +8,7 @@ import { generateTestCases } from "@/services/ai/ai-generation.service";
 import { composeRequirement } from "@/services/page-visit/compose-requirement";
 import { visitPage } from "@/services/page-visit/visit-page";
 
+export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export const POST = withErrorHandling(async (request: Request) => {

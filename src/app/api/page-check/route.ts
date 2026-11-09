@@ -5,6 +5,7 @@ import { assertPublicHttpUrl } from "@/lib/page-visit/public-url";
 import { pageCheckRequestSchema } from "@/schemas/page-check";
 import { crawlSite } from "@/services/page-check/crawl-site";
 
+export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 

@@ -16,6 +16,7 @@ export function ndjsonResponse(run: (emit: (event: PageCheckEvent) => void) => P
         logger.error("page check failed", {
           code: error instanceof AppError ? error.code : "PAGE_CHECK_FAILED",
           message,
+          cause: error instanceof Error ? error.message.slice(0, 300) : "unknown",
         });
         emit({ type: "error", message });
       } finally {

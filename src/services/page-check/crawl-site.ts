@@ -2,7 +2,7 @@ import type { Page } from "playwright";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { assertPublicHttpUrl } from "@/lib/page-visit/public-url";
-import { launchChromium, safeMessage, signIn } from "@/services/page-visit/browser";
+import { closeBrowser, launchChromium, safeMessage, signIn } from "@/services/page-visit/browser";
 import { classifyPageLoad, type PageLoadState } from "@/services/page-check/classify-page";
 import {
   isActionMenuName,
@@ -134,7 +134,7 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
     logger.info("page check finished", { host: start.host, checked, failed, truncated });
     emit({ type: "done", checked, failed, truncated });
   } finally {
-    await browser.close();
+    await closeBrowser(browser);
   }
 }
 
