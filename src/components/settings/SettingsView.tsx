@@ -1,7 +1,8 @@
 "use client";
 
-import { Alert, App, Button, Card, Checkbox, InputNumber, Select, Tag } from "antd";
+import { Alert, Button, Card, Checkbox, InputNumber, Select, Tag } from "antd";
 import { useEffect, useState } from "react";
+import { toast } from "react-toastify";
 import { clampTestCaseCount, LIMITS } from "@/constants/limits";
 import { usePreferences } from "@/hooks/usePreferences";
 import { apiFetch } from "@/lib/api/client";
@@ -15,7 +16,6 @@ import {
 } from "@/types/domain";
 
 export function SettingsView() {
-  const { message } = App.useApp();
   const { preferences, save } = usePreferences();
   const [status, setStatus] = useState<PublicStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +121,7 @@ export function SettingsView() {
               disabled={!categories.length}
               onClick={() => {
                 save({ testCaseCount, categories, detailLevel });
-                message.success("Defaults saved in this browser.");
+                toast.success("Defaults saved in this browser.");
               }}
             >
               Save defaults
