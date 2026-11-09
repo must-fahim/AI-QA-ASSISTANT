@@ -7,7 +7,11 @@ interface Bucket {
 
 const buckets = new Map<string, Bucket>();
 
-export function assertRateLimit(key: string, now = Date.now()) {
+export function assertRateLimit(
+  key: string,
+  now = Date.now(),
+  message = "Too many generation requests. Try again shortly.",
+) {
   const max = positiveInt(process.env.RATE_LIMIT_MAX, 10);
   const windowMs = positiveInt(process.env.RATE_LIMIT_WINDOW_MS, 60_000);
   const current = buckets.get(key);
@@ -18,11 +22,7 @@ export function assertRateLimit(key: string, now = Date.now()) {
   }
 
   if (current.count >= max) {
-    throw new AppError(
-      "Too many generation requests. Try again shortly.",
-      429,
-      "RATE_LIMITED",
-    );
+    throw new AppError(message, 429, "RATE_LIMITED");
   }
 
   current.count += 1;

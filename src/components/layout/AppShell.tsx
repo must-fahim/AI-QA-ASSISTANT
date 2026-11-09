@@ -6,6 +6,7 @@ import {
   History,
   LayoutDashboard,
   Menu as MenuIcon,
+  ScanSearch,
   Settings,
   Sparkles,
   type LucideIcon,
@@ -19,6 +20,7 @@ const { Sider, Header, Content } = Layout;
 const NAVIGATION: Array<{ href: string; label: string; icon: LucideIcon }> = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/generate", label: "Generate Test Cases", icon: Sparkles },
+  { href: "/page-check", label: "Page Check", icon: ScanSearch },
   { href: "/history", label: "Test History", icon: History },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -26,6 +28,7 @@ const NAVIGATION: Array<{ href: string; label: string; icon: LucideIcon }> = [
 const TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/generate": "Generate Test Cases",
+  "/page-check": "Page Check",
   "/history": "Test History",
   "/settings": "Settings",
 };

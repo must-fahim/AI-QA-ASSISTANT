@@ -222,7 +222,9 @@ export function GenerateForm({
                   min={LIMITS.testCaseCountMin}
                   max={LIMITS.testCaseCountMax}
                   value={field.value}
-                  onChange={(value) => field.onChange(clampTestCaseCount(value))}
+                  onChange={(value) =>
+                    field.onChange(typeof value === "number" ? clampTestCaseCount(value) : LIMITS.testCaseCountMin)
+                  }
                 />
               </Field>
             )}

@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "AI QA Assistant",
-  description: "Generate, review, and export software test cases from requirements.",
+  description: "Generate test cases and check whether each page on a site loads.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
