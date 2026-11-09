@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { toast } from "react-toastify";
 import {
   applyPageCheckEvent,
   emptyCheckState,
@@ -71,5 +72,19 @@ export async function runSavedRetest(id: string, login: RetestLogin) {
     update(id, (state) => failOpenRows(state, message));
   } finally {
     update(id, (state) => ({ ...state, running: false }));
+    notifyRetest(current(id));
   }
+}
+
+function notifyRetest(state: CheckState) {
+  const failed = state.rows.filter((row) => row.state === "failed").length;
+  if (failed > 0) {
+    toast.error(failed === 1 ? "1 test failed" : `${failed} tests failed`);
+    return;
+  }
+  if (state.rows.length > 0 && state.rows.every((row) => row.state === "loaded")) {
+    toast.success("All tests passed");
+    return;
+  }
+  if (state.error) toast.error(state.error);
 }

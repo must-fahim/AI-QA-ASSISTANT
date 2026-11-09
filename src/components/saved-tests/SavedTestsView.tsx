@@ -5,7 +5,7 @@ import { Eye, Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import { formatTimestamp } from "@/lib/format";
 import { queueRetest } from "@/lib/saved-tests/retest-store";

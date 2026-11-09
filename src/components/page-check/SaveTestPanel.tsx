@@ -3,7 +3,7 @@
 import { Button, Input } from "antd";
 import { Save } from "lucide-react";
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import { PageListError, pagesFromCheckRows, uniquePages } from "@/lib/saved-tests/pages";
 import type { CheckRow } from "@/lib/page-check/rows";

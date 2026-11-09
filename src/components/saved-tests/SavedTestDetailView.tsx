@@ -5,7 +5,7 @@ import { ArrowLeft, Check, Pencil, Play, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import { PageResultList } from "@/components/page-check/PageResultList";
 import { apiFetch } from "@/lib/api/client";
 import { formatTimestamp } from "@/lib/format";
@@ -24,6 +24,7 @@ export function SavedTestDetailView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [showResults, setShowResults] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -40,7 +41,13 @@ export function SavedTestDetailView() {
         if (active) setLoading(false);
       });
     const queued = takeQueuedRetest(id);
-    if (queued) void runSavedRetest(id, queued);
+    if (queued) {
+      setEmail(queued.loginEmail ?? "");
+      setPassword(queued.loginPassword ?? "");
+      setLoginOpen(true);
+      setShowResults(true);
+      void runSavedRetest(id, queued);
+    }
     return () => {
       active = false;
     };
@@ -58,6 +65,24 @@ export function SavedTestDetailView() {
       active = false;
     };
   }, [id, retest.summary]);
+
+  function openRetest() {
+    setShowResults(retest.running);
+    setLoginOpen(true);
+  }
+
+  function closeRetest() {
+    setLoginOpen(false);
+    if (!retest.running) {
+      setPassword("");
+      setShowResults(false);
+    }
+  }
+
+  function startRetest() {
+    setShowResults(true);
+    void runSavedRetest(id, { loginEmail: email, loginPassword: password });
+  }
 
   function remove() {
     if (!test) return;
@@ -93,6 +118,9 @@ export function SavedTestDetailView() {
           Saved tests
         </Link>
         <div className="flex flex-wrap gap-2">
+          <Button type="primary" icon={<Play size={16} />} loading={retest.running} onClick={openRetest}>
+            Retest
+          </Button>
           <Link href={`/saved-tests/${id}/edit`}>
             <Button icon={<Pencil size={16} />}>Edit</Button>
           </Link>
@@ -113,7 +141,7 @@ export function SavedTestDetailView() {
           <Stat label="Added" value={String(added)} />
           <Stat label="Last tested" value={test.lastTestedAt ? formatTimestamp(test.lastTestedAt) : "Not yet"} />
         </div>
-        <p className="mt-3 text-xs text-[#6b7280]">Created {formatTimestamp(test.createdAt)}</p>
+        <p className="pt-4 text-xs text-[#6b7280]">Created {formatTimestamp(test.createdAt)}</p>
       </section>
 
       <section className="rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm">
@@ -126,45 +154,51 @@ export function SavedTestDetailView() {
         </ul>
       </section>
 
-      <section id="retest" className="rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold">Retest</h2>
-            <p className="text-xs text-[#6b7280]">Checks all {test.pageCount} saved pages. A login is optional and is not stored.</p>
-          </div>
-          <Button type="primary" icon={<Play size={16} />} loading={retest.running} onClick={() => setLoginOpen(true)}>
-            Retest
-          </Button>
-        </div>
-      </section>
-
-      {retest.error ? <Alert type="error" showIcon title={retest.error} /> : null}
-      {retest.rows.length > 0 || retest.running ? (
-        <PageResultList rows={retest.rows} summary={retest.summary} empty="Saved pages will appear here while they load." />
-      ) : null}
-
       <Modal
         title={`Retest ${test.name}`}
         open={loginOpen}
+        width={640}
+        onCancel={closeRetest}
+        footer={
+          showResults
+            ? [
+                <Button key="again" type="primary" icon={<Play size={16} />} disabled={retest.running} onClick={startRetest}>
+                  Retest again
+                </Button>,
+                <Button key="close" onClick={closeRetest}>
+                  {retest.running ? "Hide" : "Close"}
+                </Button>,
+              ]
+            : undefined
+        }
         okText="Start retest"
-        confirmLoading={retest.running}
-        onOk={() => {
-          setLoginOpen(false);
-          void runSavedRetest(id, { loginEmail: email, loginPassword: password });
-          setPassword("");
-        }}
-        onCancel={() => setLoginOpen(false)}
+        onOk={startRetest}
+        styles={{ body: { display: "flex", flexDirection: "column", maxHeight: "60vh", overflow: "hidden" } }}
       >
-        <p className="mb-3 text-sm text-[#6b7280]">Leave these empty when the site does not need a login.</p>
-        <div className="flex flex-col gap-3">
-          <Input value={email} placeholder="Login email" autoComplete="off" onChange={(event) => setEmail(event.target.value)} />
-          <Input.Password
-            value={password}
-            placeholder="Login password"
-            autoComplete="new-password"
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </div>
+        {showResults ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <p className="shrink-0 text-sm text-[#6b7280]">
+              Checking the {test.pageCount} saved pages. Discovery does not run again.
+            </p>
+            {retest.error ? <Alert type="error" showIcon title={retest.error} /> : null}
+            <PageResultList rows={retest.rows} summary={retest.summary} empty="Saved pages will appear here while they load." embedded scrollable />
+          </div>
+        ) : (
+          <>
+            <p className="mb-3 text-sm text-[#6b7280]">
+              Checks all {test.pageCount} saved pages. Leave these empty when the site does not need a login. The password is not stored.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Input value={email} placeholder="Login email" autoComplete="off" onChange={(event) => setEmail(event.target.value)} />
+              <Input.Password
+                value={password}
+                placeholder="Login password"
+                autoComplete="new-password"
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+          </>
+        )}
       </Modal>
     </div>
   );

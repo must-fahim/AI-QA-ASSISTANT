@@ -5,16 +5,20 @@ export function PageResultList({
   rows,
   summary,
   empty,
+  embedded = false,
+  scrollable = false,
 }: {
   rows: CheckRow[];
   summary?: string | null;
   empty: string;
+  embedded?: boolean;
+  scrollable?: boolean;
 }) {
   const loading = rows.find((row) => row.state === "loading");
 
   return (
-    <section className="rounded-lg border border-[#e5e7eb] bg-white p-4 shadow-sm" aria-live="polite">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <section className={scrollable ? "flex min-h-0 flex-1 flex-col" : embedded ? "" : "rounded-lg border border-[#e5e7eb] bg-white p-4 shadow-sm"} aria-live="polite">
+      <div className={`mb-3 flex items-center justify-between gap-3 ${scrollable ? "shrink-0" : ""}`}>
         <h2 className="text-sm font-semibold">Pages</h2>
         {summary ? <p className="text-xs text-[#6b7280]">{summary}</p> : null}
       </div>
@@ -22,7 +26,7 @@ export function PageResultList({
       {rows.length === 0 ? (
         <p className="text-sm text-[#6b7280]">{empty}</p>
       ) : (
-        <ul className="flex flex-col">
+        <ul className={scrollable ? "custom-scrollbar-with-spacing flex max-h-[45vh] min-h-0 flex-1 flex-col overflow-y-auto" : "flex flex-col"}>
           {rows.map((row) => (
             <li key={row.url} className="flex items-center justify-between gap-3 border-t border-[#f3f4f6] py-3">
               <div className="min-w-0">

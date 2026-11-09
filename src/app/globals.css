@@ -19,3 +19,55 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
 }
+
+/* Ant Design's reset sets paragraph, heading, and list margins outside
+   Tailwind's layers, so utilities like m-0 cannot override them. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+ul,
+ol,
+dl,
+address,
+figure,
+blockquote {
+  margin: 0;
+}
+
+.custom-scrollbar-with-spacing {
+  scrollbar-gutter: stable;
+  scrollbar-color: #e2e5ee #ffffff;
+  scrollbar-width: auto;
+}
+
+.custom-scrollbar-with-spacing::-webkit-scrollbar {
+  width: 18px;
+  height: 18px;
+}
+
+.custom-scrollbar-with-spacing::-webkit-scrollbar-thumb {
+  background: #e2e5ee;
+  border-radius: 999px;
+  border: 6px solid #ffffff;
+  background-clip: padding-box;
+}
+
+.custom-scrollbar-with-spacing::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+.custom-scrollbar-with-spacing::-webkit-scrollbar-corner {
+  background: #ffffff;
+}
+
+.Toastify__toast-container--top-right {
+  z-index: 12000 !important;
+  top: 12px !important;
+  right: 16px !important;
+  left: auto !important;
+  transform: none !important;
+}

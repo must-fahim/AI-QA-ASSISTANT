@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         : (TITLES[selected] ?? "AI QA Assistant");
 
   return (
-    <Layout className="min-h-screen bg-[#f5f5f7]">
+    <Layout className="h-dvh overflow-hidden bg-[#f5f5f7]">
       <Sider
         breakpoint="lg"
         collapsedWidth={0}
@@ -68,15 +68,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           setMobile(broken);
           setCollapsed(broken);
         }}
-        className="border-r border-[#e5e7eb]"
+        className="h-dvh overflow-x-hidden overflow-y-auto border-r border-[#e5e7eb]"
       >
-        <div className="flex h-16 items-center gap-3 px-5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[#712DC8] text-xs font-semibold text-white">
+        <div className="flex h-16 items-center gap-2.5 border-b border-[#eeeef2] px-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#712DC8] text-[11px] font-bold tracking-wide text-white">
             QA
           </span>
-          <div>
-            <p className="text-sm font-semibold leading-4 text-[#1c1c1c]">AI QA Assistant</p>
-            <p className="text-xs text-[#6b7280]">Test case studio</p>
+          <div className="min-w-0">
+            <p className="m-0 truncate text-[13px] font-semibold leading-4 text-[#1c1c1c]">AI QA Assistant</p>
+            <p className="m-0 truncate text-[11px] leading-4 text-[#8b8b95]">Test case studio</p>
           </div>
         </div>
         <Menu
@@ -93,9 +93,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           }}
         />
       </Sider>
-      <Layout>
-        <Header className="sticky top-0 z-20 flex items-center justify-between border-b border-[#e5e7eb] bg-white">
-          <div className="flex items-center gap-2">
+      <Layout className="min-h-0 bg-[#f5f5f7]">
+        <Header className="z-20 flex h-16 shrink-0 items-center justify-between border-b border-[#e5e7eb] bg-white px-4 !leading-normal md:px-6">
+          <div className="flex min-w-0 items-center gap-2">
             <Button
               type="text"
               className="lg:!hidden"
@@ -103,20 +103,22 @@ export function AppShell({ children }: { children: ReactNode }) {
               icon={<MenuIcon size={18} />}
               onClick={() => setCollapsed((current) => !current)}
             />
-            <h1 className="m-0 truncate text-base font-semibold whitespace-nowrap text-[#1c1c1c]">{title}</h1>
+            <h1 className="m-0 truncate text-base font-semibold leading-5 whitespace-nowrap text-[#1c1c1c]">{title}</h1>
           </div>
           <div className="flex items-center gap-3">
             <ModelSelect />
-            <div className="hidden text-right leading-4 sm:block">
-              <p className="text-sm font-medium text-[#1c1c1c]">QA Engineer</p>
-              <p className="text-xs text-[#6b7280]">Local workspace</p>
+            <div className="hidden items-center gap-2 rounded-full bg-[#f6f1fb] py-1 pr-1 pl-3 sm:flex">
+              <div className="text-right">
+                <p className="m-0 text-[13px] font-semibold leading-4 text-[#1c1c1c]">QA Engineer</p>
+                <p className="m-0 text-[11px] leading-4 text-[#7c6a90]">Local workspace</p>
+              </div>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#712DC8] text-[11px] font-semibold text-white">
+                QA
+              </span>
             </div>
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f4edfb] text-xs font-semibold text-[#712DC8]">
-              QA
-            </span>
           </div>
         </Header>
-        <Content className="p-4 md:p-6">{children}</Content>
+        <Content className="overflow-y-auto p-4 md:p-6">{children}</Content>
       </Layout>
     </Layout>
   );

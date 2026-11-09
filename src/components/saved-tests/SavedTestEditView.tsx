@@ -1,11 +1,11 @@
 "use client";
 
-import { Alert, Button, Input } from "antd";
+import { Alert, Button, Input, Modal } from "antd";
 import { ArrowLeft, RefreshCw, Save } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import { PageResultList } from "@/components/page-check/PageResultList";
 import { PageEditor, type DraftPage } from "@/components/saved-tests/PageEditor";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
@@ -27,6 +27,7 @@ export function SavedTestEditView() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState<CheckState>(emptyCheckState());
+  const [regenerateOpen, setRegenerateOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -94,7 +95,8 @@ export function SavedTestEditView() {
       const discovered = pagesFromCheckRows(siteUrl, review.rows);
       const merged = mergeDiscoveredPages(siteUrl, pages, discovered);
       setPages(merged.map((page) => ({ ...page, key: crypto.randomUUID() })));
-      toast.success("Discovered pages are ready to review. Added pages were kept.");
+      setRegenerateOpen(false);
+      toast.success("Discovered pages replaced the list. Added pages were kept. Save changes to store them.");
     } catch (caught) {
       toast.error(messageFrom(caught, "The discovered pages could not be applied."));
     }
@@ -110,9 +112,14 @@ export function SavedTestEditView() {
           <ArrowLeft size={16} aria-hidden />
           Back to view
         </Link>
-        <Button type="primary" icon={<Save size={16} />} loading={saving} onClick={() => void save()}>
-          Save changes
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button icon={<RefreshCw size={16} />} onClick={() => setRegenerateOpen(true)}>
+            Regenerate pages
+          </Button>
+          <Button type="primary" icon={<Save size={16} />} loading={saving} onClick={() => void save()}>
+            Save changes
+          </Button>
+        </div>
       </div>
 
       <section className="rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm">
@@ -135,12 +142,25 @@ export function SavedTestEditView() {
         <PageEditor siteUrl={siteUrl} pages={pages} onChange={setPages} />
       </section>
 
-      <section className="rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-sm font-semibold">Regenerate pages</h2>
-        <p className="mb-3 text-xs text-[#6b7280]">
-          Runs the page check again. The saved list stays as it is until you apply the new pages and click Save changes. Pages you added are kept.
+      <Modal
+        title="Regenerate pages"
+        open={regenerateOpen}
+        width={640}
+        onCancel={() => setRegenerateOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setRegenerateOpen(false)}>
+            Cancel
+          </Button>,
+          <Button key="apply" type="primary" disabled={!review.summary || review.running} onClick={applyDiscovered}>
+            Use discovered pages
+          </Button>,
+        ]}
+        styles={{ body: { display: "flex", flexDirection: "column", maxHeight: "60vh", overflow: "hidden" } }}
+      >
+        <p className="mb-3 shrink-0 text-sm text-[#6b7280]">
+          Runs the page check again. The list on this page stays as it is until you use the discovered pages and click Save changes. Pages you added are kept. The login is not stored.
         </p>
-        <div className="mb-3 grid gap-3 md:grid-cols-2">
+        <div className="mb-3 grid gap-3 sm:grid-cols-2">
           <Input value={email} placeholder="Login email" autoComplete="off" onChange={(event) => setEmail(event.target.value)} />
           <Input.Password
             value={password}
@@ -152,19 +172,13 @@ export function SavedTestEditView() {
         <Button icon={<RefreshCw size={16} />} loading={review.running} onClick={() => void regenerate()}>
           Regenerate pages
         </Button>
-      </section>
-
-      {review.error ? <Alert type="error" showIcon title={review.error} /> : null}
-      {review.rows.length > 0 || review.running ? (
-        <div className="flex flex-col gap-3">
-          <PageResultList rows={review.rows} summary={review.summary} empty="Discovered pages will appear here." />
-          <div>
-            <Button type="primary" disabled={!review.summary || review.running} onClick={applyDiscovered}>
-              Use discovered pages
-            </Button>
+        {review.error ? <div className="mt-3"><Alert type="error" showIcon title={review.error} /></div> : null}
+        {review.rows.length > 0 || review.running ? (
+          <div className="mt-4 flex min-h-0 flex-1 flex-col">
+            <PageResultList rows={review.rows} summary={review.summary} empty="Discovered pages will appear here." embedded scrollable />
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </Modal>
     </div>
   );
 }

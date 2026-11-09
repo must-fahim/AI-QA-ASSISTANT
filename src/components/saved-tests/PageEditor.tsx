@@ -1,7 +1,7 @@
 "use client";
 
-import { Button, Input, Tag } from "antd";
-import { Plus, Trash2 } from "lucide-react";
+import { Button, Input, Modal, Tag } from "antd";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { PageListError, normalizeSavedPageUrl, type SavedPageDraft } from "@/lib/saved-tests/pages";
 
@@ -20,47 +20,40 @@ export function PageEditor({
   onChange: (pages: DraftPage[]) => void;
   lockDiscovered?: boolean;
 }) {
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  const [draft, setDraft] = useState<{ key: string | null; name: string; url: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
   const discovered = pages.filter((page) => page.source === "discovered").length;
   const manual = pages.length - discovered;
 
-  function addPage() {
-    const nextName = name.replace(/\s+/g, " ").trim();
+  function openAdd() {
+    setError(null);
+    setDraft({ key: null, name: "", url: "" });
+  }
+
+  function openEdit(page: DraftPage) {
+    setError(null);
+    setDraft({ key: page.key, name: page.name, url: page.url });
+  }
+
+  function saveDraft() {
+    if (!draft) return;
+    const nextName = draft.name.replace(/\s+/g, " ").trim();
     if (!nextName) {
       setError("Enter a page name.");
       return;
     }
     try {
-      const normalized = normalizeSavedPageUrl(siteUrl, url);
-      if (pages.some((page) => page.url === normalized)) {
+      const normalized = normalizeSavedPageUrl(siteUrl, draft.url);
+      if (pages.some((page) => page.key !== draft.key && page.url === normalized)) {
         setError("That page URL is already in the list.");
         return;
       }
-      onChange([...pages, { key: crypto.randomUUID(), name: nextName, url: normalized, source: "manual", lastStatus: null }]);
-      setName("");
-      setUrl("");
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof PageListError ? caught.message : "Enter a valid page URL.");
-    }
-  }
-
-  function updatePage(key: string, patch: Partial<DraftPage>) {
-    onChange(pages.map((page) => (page.key === key ? { ...page, ...patch } : page)));
-  }
-
-  function commitUrl(page: DraftPage, value: string) {
-    try {
-      const normalized = normalizeSavedPageUrl(siteUrl, value);
-      if (pages.some((item) => item.key !== page.key && item.url === normalized)) {
-        setError("That page URL is already in the list.");
-        return;
+      if (draft.key) {
+        onChange(pages.map((page) => (page.key === draft.key ? { ...page, name: nextName, url: normalized } : page)));
+      } else {
+        onChange([...pages, { key: crypto.randomUUID(), name: nextName, url: normalized, source: "manual", lastStatus: null }]);
       }
-      updatePage(page.key, { url: normalized });
-      setEditingKey(null);
+      setDraft(null);
       setError(null);
     } catch (caught) {
       setError(caught instanceof PageListError ? caught.message : "Enter a valid page URL.");
@@ -69,70 +62,81 @@ export function PageEditor({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-[#6b7280]">
-        Discovered {discovered} · Added {manual} · Total {pages.length}
-      </p>
-      <div className="grid gap-2 md:grid-cols-[1fr_1.4fr_auto]">
-        <Input value={name} placeholder="Page name" onChange={(event) => setName(event.target.value)} aria-label="Missing page name" />
-        <Input
-          value={url}
-          placeholder="https://example.com/pricing or /pricing"
-          onChange={(event) => setUrl(event.target.value)}
-          aria-label="Missing page URL"
-          onPressEnter={addPage}
-        />
-        <Button icon={<Plus size={16} />} onClick={addPage}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-[#6b7280]">
+          Discovered {discovered} · Added {manual} · Total {pages.length}
+        </p>
+        <Button icon={<Plus size={16} />} onClick={openAdd}>
           Add page
         </Button>
       </div>
-      {error ? <p className="text-xs text-[#cf1322]">{error}</p> : null}
       <ul className="flex flex-col">
         {pages.map((page) => {
           const locked = lockDiscovered && page.source === "discovered";
           return (
-            <li key={page.key} className="grid gap-2 border-t border-[#f3f4f6] py-3 md:grid-cols-[140px_1fr_auto] md:items-center">
-              <div className="flex items-center gap-2">
-                <Tag color={page.source === "manual" ? "purple" : "default"}>
-                  {page.source === "manual" ? "Added" : "Discovered"}
-                </Tag>
+            <li key={page.key} className="flex items-center justify-between gap-3 border-t border-[#f3f4f6] py-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-medium text-[#1c1c1c]">{page.name}</p>
+                  <Tag color={page.source === "manual" ? "purple" : "default"}>
+                    {page.source === "manual" ? "Added" : "Discovered"}
+                  </Tag>
+                </div>
+                <p className="truncate text-xs text-[#6b7280]">{pagePath(page.url)}</p>
               </div>
-              {locked ? (
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{page.name}</p>
-                  <p className="truncate text-xs text-[#6b7280]">{page.url}</p>
-                </div>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Input
-                    value={page.name}
-                    aria-label={`Name for ${page.url}`}
-                    onChange={(event) => updatePage(page.key, { name: event.target.value })}
-                  />
-                  <Input
-                    value={page.url}
-                    aria-label={`URL for ${page.name}`}
-                    onFocus={() => setEditingKey(page.key)}
-                    onChange={(event) => updatePage(page.key, { url: event.target.value })}
-                    onBlur={(event) => {
-                      if (editingKey === page.key) commitUrl(page, event.target.value);
-                    }}
-                  />
-                </div>
-              )}
               {locked ? null : (
-                <Button
-                  type="text"
-                  danger
-                  aria-label={`Remove ${page.name}`}
-                  icon={<Trash2 size={16} />}
-                  onClick={() => onChange(pages.filter((item) => item.key !== page.key))}
-                />
+                <div className="flex shrink-0">
+                  <Button type="text" aria-label={`Edit ${page.name}`} icon={<Pencil size={16} />} onClick={() => openEdit(page)} />
+                  <Button
+                    type="text"
+                    danger
+                    aria-label={`Remove ${page.name}`}
+                    icon={<Trash2 size={16} />}
+                    onClick={() => onChange(pages.filter((item) => item.key !== page.key))}
+                  />
+                </div>
               )}
             </li>
           );
         })}
       </ul>
       {pages.length === 0 ? <p className="text-sm text-[#6b7280]">No pages yet.</p> : null}
+      <Modal
+        title={draft?.key ? "Edit page" : "Add page"}
+        open={Boolean(draft)}
+        okText={draft?.key ? "Save page" : "Add page"}
+        onOk={saveDraft}
+        onCancel={() => setDraft(null)}
+        destroyOnHidden
+      >
+        <p className="mb-3 text-sm text-[#6b7280]">Use a full URL or a path on this website, such as /pricing.</p>
+        <div className="flex flex-col gap-3">
+          <Input
+            value={draft?.name ?? ""}
+            placeholder="Page name"
+            aria-label="Page name"
+            onChange={(event) => setDraft((current) => (current ? { ...current, name: event.target.value } : current))}
+            onPressEnter={saveDraft}
+          />
+          <Input
+            value={draft?.url ?? ""}
+            placeholder="https://example.com/pricing or /pricing"
+            aria-label="Page URL"
+            onChange={(event) => setDraft((current) => (current ? { ...current, url: event.target.value } : current))}
+            onPressEnter={saveDraft}
+          />
+          {error ? <p className="text-xs text-[#cf1322]">{error}</p> : null}
+        </div>
+      </Modal>
     </div>
   );
+}
+
+function pagePath(url: string) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}` || "/";
+  } catch {
+    return url;
+  }
 }

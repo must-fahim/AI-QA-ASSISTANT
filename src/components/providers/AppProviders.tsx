@@ -2,7 +2,8 @@
 
 import { App, ConfigProvider } from "antd";
 import { useEffect, useState, type ReactNode } from "react";
-import { Toaster } from "react-hot-toast";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const [toastsReady, setToastsReady] = useState(false);
@@ -43,7 +44,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
       }}
     >
       <App>
-        {toastsReady ? <Toaster position="top-right" containerStyle={{ top: 72 }} /> : null}
+        {toastsReady ? (
+          <ToastContainer position="top-right" style={{ top: 12, zIndex: 12000 }} />
+        ) : null}
         {children}
       </App>
     </ConfigProvider>
