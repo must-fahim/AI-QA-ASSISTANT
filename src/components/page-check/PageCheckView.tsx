@@ -8,7 +8,7 @@ import { Controller, useForm } from "react-hook-form";
 import { PageResultList } from "@/components/page-check/PageResultList";
 import { SaveTestPanel } from "@/components/page-check/SaveTestPanel";
 import { applyPageCheckEvent, emptyCheckState, type CheckState } from "@/lib/page-check/rows";
-import { failOpenRows, readFailedResponse, readPageCheckStream } from "@/lib/page-check/read-stream";
+import { failOpenRows, readPageCheckBatches } from "@/lib/page-check/read-stream";
 import { pageCheckFormSchema, type PageCheckFormValues } from "@/schemas/page-check-form";
 
 export function PageCheckView() {
@@ -26,20 +26,22 @@ export function PageCheckView() {
     setCheck({ ...emptyCheckState(), running: true });
 
     try {
-      const response = await fetch("/api/page-check", {
-        method: "POST",
-        headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
-        body: JSON.stringify({
-          siteUrl: values.siteUrl,
-          loginEmail: values.loginEmail || undefined,
-          loginPassword: values.loginPassword || undefined,
-        }),
-      });
-
-      if (!response.ok || !response.body) throw await readFailedResponse(response);
-      await readPageCheckStream(response, (event) => {
-        setCheck((state) => applyPageCheckEvent(state, event));
-      });
+      await readPageCheckBatches(
+        (resume) =>
+          fetch("/api/page-check", {
+            method: "POST",
+            headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
+            body: JSON.stringify({
+              siteUrl: values.siteUrl,
+              loginEmail: values.loginEmail || undefined,
+              loginPassword: values.loginPassword || undefined,
+              resume: resume ?? undefined,
+            }),
+          }),
+        (event) => {
+          setCheck((state) => applyPageCheckEvent(state, event));
+        },
+      );
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "The page check could not be completed.";
       setCheck((state) => failOpenRows(state, message));

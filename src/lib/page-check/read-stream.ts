@@ -1,6 +1,6 @@
 import { ApiClientError } from "@/lib/api/client";
 import type { CheckState } from "@/lib/page-check/rows";
-import type { PageCheckEvent } from "@/services/page-check/types";
+import type { PageCheckEvent, PageCheckResume } from "@/services/page-check/types";
 
 const HOST_STOPPED = "The server stopped the page check before it finished. A long run can exceed the hosting time limit.";
 
@@ -24,11 +24,47 @@ export async function readPageCheckStream(response: Response, onEvent: (event: P
       } catch {
         continue;
       }
-      if (event.type === "done" || event.type === "error") finished = true;
+      if (event.type === "done" || event.type === "error" || event.type === "continue") finished = true;
       onEvent(event);
     }
   }
   if (!finished) throw new ApiClientError(504, "PAGE_CHECK_TIMEOUT", HOST_STOPPED);
+}
+
+const BATCH_LIMIT = 8;
+
+export async function readPageCheckBatches(
+  requestBatch: (resume: PageCheckResume | null) => Promise<Response>,
+  onEvent: (event: PageCheckEvent) => void,
+) {
+  let resume: PageCheckResume | null = null;
+  let previousKey = "";
+  let repeats = 0;
+  for (let batch = 0; batch < BATCH_LIMIT; batch += 1) {
+    const response = await requestBatch(resume);
+    if (!response.ok || !response.body) throw await readFailedResponse(response);
+    const found: { resume: PageCheckResume | null } = { resume: null };
+    await readPageCheckStream(response, (event) => {
+      if (event.type === "continue" && event.resume) {
+        found.resume = event.resume;
+        return;
+      }
+      onEvent(event);
+    });
+    const next = found.resume;
+    if (!next || !hasMore(next)) return;
+    const key = `${next.checked}:${next.queue?.[0]?.url ?? ""}:${next.doneUrls?.length ?? 0}`;
+    repeats = key === previousKey ? repeats + 1 : 0;
+    previousKey = key;
+    if (repeats >= 2) break;
+    resume = next;
+  }
+  throw new ApiClientError(504, "PAGE_CHECK_TIMEOUT", HOST_STOPPED);
+}
+
+function hasMore(resume: PageCheckResume) {
+  if ((resume.queue?.length ?? 0) > 0) return true;
+  return Boolean(resume.doneUrls);
 }
 
 export async function readFailedResponse(response: Response) {

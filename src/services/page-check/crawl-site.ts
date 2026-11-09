@@ -3,6 +3,7 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { assertPublicHttpUrl } from "@/lib/page-visit/public-url";
 import { closeBrowser, launchChromium, safeMessage, signIn } from "@/services/page-visit/browser";
+import { batchExpired } from "@/services/page-check/batch";
 import { classifyPageLoad, type PageLoadState } from "@/services/page-check/classify-page";
 import {
   isActionMenuName,
@@ -14,9 +15,10 @@ import {
   normalizePageUrl,
   pageLabel,
   pagePath,
+  pageShape,
   allowSimilarPage,
 } from "@/services/page-check/links";
-import type { PageCheckEvent } from "@/services/page-check/types";
+import type { PageCheckEvent, PageCheckResume } from "@/services/page-check/types";
 
 const MAX_PAGES = 45;
 
@@ -24,6 +26,7 @@ interface CrawlInput {
   siteUrl: string;
   loginEmail?: string;
   loginPassword?: string;
+  resume?: PageCheckResume;
 }
 
 interface PageSnapshot {
@@ -39,17 +42,44 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
   const origin = start.origin;
   const email = input.loginEmail?.trim() ?? "";
   const password = input.loginPassword ?? "";
-  const browser = await launchChromium();
   const seen = new Set<string>();
   const similarPages = new Map<string, number>();
-  const queue: Array<{ url: string; name: string }> = [
-    { url: start.toString(), name: pageLabel(start.toString()) },
-  ];
-  let checked = 0;
-  let failed = 0;
+  const queue: Array<{ url: string; name: string }> = [];
+  let checked = input.resume?.checked ?? 0;
+  let failed = input.resume?.failed ?? 0;
   let truncated = false;
   let loginHandled = false;
-  let menuDiscovered = false;
+  let menuDiscovered = input.resume?.menuDiscovered ?? false;
+  restoreCrawl(origin, input.resume, seen, similarPages, queue);
+  if (queue.length === 0 && !input.resume) {
+    queue.push({ url: start.toString(), name: pageLabel(start.toString()) });
+  }
+  if (queue.length === 0) {
+    emit({ type: "done", checked, failed, truncated });
+    return;
+  }
+
+  const startedAt = Date.now();
+  const browser = await launchChromium();
+  const emitContinue = () => {
+    if (queue.length === 0) {
+      emit({ type: "done", checked, failed, truncated });
+      return;
+    }
+    emit({
+      type: "continue",
+      checked,
+      failed,
+      resume: {
+        seen: [...seen],
+        queue: queue.map((item) => ({ url: item.url, name: item.name })),
+        similar: [...similarPages.entries()].map(([shape, count]) => ({ shape, count })),
+        menuDiscovered,
+        checked,
+        failed,
+      },
+    });
+  };
 
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -58,6 +88,10 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
     });
 
     while (queue.length > 0 && checked < MAX_PAGES) {
+      if (batchExpired(startedAt)) {
+        emitContinue();
+        return;
+      }
       const current = queue.shift();
       if (!current || seen.has(current.url) || !allowSimilarPage(current.url, similarPages)) continue;
       seen.add(current.url);
@@ -83,13 +117,35 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
         if (recorded.status === "failed") failed += 1;
         checked += 1;
         seen.add(recorded.url);
-        const details = await checkPageDetails(page, recorded, origin, seen, similarPages, emit, password);
+        const details = await checkPageDetails(page, recorded, origin, seen, similarPages, emit, password, () =>
+          batchExpired(startedAt),
+        );
+        if (details.paused) {
+          checked -= 1;
+          if (recorded.status === "failed") failed -= 1;
+          seen.delete(current.url);
+          seen.delete(recorded.url);
+          releaseSimilar(similarPages, current.url);
+          if (!queue.some((item) => item.url === recorded.url)) {
+            queue.unshift({ url: recorded.url, name: recorded.name });
+          }
+          emitContinue();
+          return;
+        }
         checked += details.checked;
         failed += details.failed;
         if (!menuDiscovered && recorded.status === "loaded") {
           menuDiscovered = true;
           const discovered = await discoverMenuPages(page, origin, seen);
-          for (const item of discovered) {
+          for (let index = 0; index < discovered.length; index += 1) {
+            if (batchExpired(startedAt)) {
+              for (const rest of discovered.slice(index).reverse()) {
+                if (!seen.has(rest.url) && !queue.some((entry) => entry.url === rest.url)) queue.unshift(rest);
+              }
+              emitContinue();
+              return;
+            }
+            const item = discovered[index];
             if (checked >= MAX_PAGES) {
               truncated = true;
               break;
@@ -104,9 +160,18 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
               if (!menuRecord || menuRecord.status === "failed") failed += 1;
               checked += 1;
               if (menuRecord?.status === "loaded" && checked < MAX_PAGES) {
-                const details = await checkPageDetails(page, menuRecord, origin, seen, similarPages, emit, password);
+                const details = await checkPageDetails(page, menuRecord, origin, seen, similarPages, emit, password, () =>
+                  batchExpired(startedAt),
+                );
                 checked += details.checked;
                 failed += details.failed;
+                if (details.paused) {
+                  for (const rest of discovered.slice(index + 1).reverse()) {
+                    if (!seen.has(rest.url) && !queue.some((entry) => entry.url === rest.url)) queue.unshift(rest);
+                  }
+                  emitContinue();
+                  return;
+                }
               }
               if (menuRecord && queueLinks(menuRecord.links, menuRecord.pageUrl, origin, seen, queue)) {
                 truncated = true;
@@ -195,8 +260,9 @@ async function checkPageDetails(
   similarPages: Map<string, number>,
   emit: (event: PageCheckEvent) => void,
   password: string,
+  shouldPause: () => boolean = () => false,
 ) {
-  const totals = { checked: 0, failed: 0 };
+  const totals = { checked: 0, failed: 0, paused: false };
   if (seen.size >= MAX_PAGES) return totals;
   const listUrl = list.pageUrl;
   await revealTables(page);
@@ -216,6 +282,10 @@ async function checkPageDetails(
       rowIndex < Math.min(rowCount, 20) && openedFromTable < 2 && seen.size < MAX_PAGES;
       rowIndex += 1
     ) {
+      if (shouldPause()) {
+        totals.paused = true;
+        return totals;
+      }
       if (!samePath(page.url(), listUrl)) await returnToList(page, listUrl);
       const row = tables.nth(tableIndex).locator("tbody tr").nth(rowIndex);
       const text = (await row.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
@@ -238,6 +308,11 @@ async function checkPageDetails(
       if (outcome === "failed") totals.failed += 1;
       await returnToList(page, listUrl);
     }
+  }
+
+  if (shouldPause()) {
+    totals.paused = true;
+    return totals;
   }
 
   if (opened === 0 && seen.size < MAX_PAGES) {
@@ -541,6 +616,63 @@ async function discoverMenuPages(page: Page, origin: string, seen: Set<string>) 
   }
 
   return [...found.entries()].map(([url, name]) => ({ url, name }));
+}
+
+function restoreCrawl(
+  origin: string,
+  resume: PageCheckResume | undefined,
+  seen: Set<string>,
+  similarPages: Map<string, number>,
+  queue: Array<{ url: string; name: string }>,
+) {
+  if (!resume) return;
+  for (const value of resume.seen ?? []) {
+    const kept = keepSeen(origin, value);
+    if (kept) seen.add(kept);
+  }
+  for (const item of resume.similar ?? []) {
+    if (item.shape.startsWith("/") && item.shape.includes("/:id")) similarPages.set(item.shape, item.count);
+  }
+  for (const item of resume.queue ?? []) {
+    const url = sameSiteUrl(origin, item.url);
+    if (!url || seen.has(url) || queue.some((entry) => entry.url === url)) continue;
+    queue.push({ url, name: item.name });
+  }
+}
+
+function keepSeen(origin: string, value: string) {
+  const hashIndex = value.indexOf("#");
+  const base = hashIndex === -1 ? value : value.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? "" : value.slice(hashIndex + 1, hashIndex + 41);
+  const url = sameSiteUrl(origin, base);
+  if (!url) return null;
+  return hash ? `${url}#${hash}` : url;
+}
+
+function sameSiteUrl(origin: string, value: string) {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password) return null;
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (url.origin !== origin) return null;
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function releaseSimilar(similarPages: Map<string, number>, url: string) {
+  let shape = "";
+  try {
+    shape = pageShape(url);
+  } catch {
+    return;
+  }
+  if (!shape.includes("/:id")) return;
+  const count = similarPages.get(shape) ?? 0;
+  if (count <= 1) similarPages.delete(shape);
+  else similarPages.set(shape, count - 1);
 }
 
 function queueLinks(

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { batchExpired, PAGE_CHECK_BATCH_MS } from "@/services/page-check/batch";
 import { classifyPageLoad } from "@/services/page-check/classify-page";
 import {
   isActionMenuName,
@@ -14,6 +15,14 @@ import {
 } from "@/services/page-check/links";
 
 const origin = "https://stg.example.com";
+
+describe("page check batches", () => {
+  it("keeps going until the batch window is over", () => {
+    const startedAt = 1_000;
+    expect(batchExpired(startedAt, startedAt + PAGE_CHECK_BATCH_MS - 1)).toBe(false);
+    expect(batchExpired(startedAt, startedAt + PAGE_CHECK_BATCH_MS)).toBe(true);
+  });
+});
 
 describe("page check links", () => {
   it("keeps same-site pages and detail pages, and skips logout, files, and other sites", () => {

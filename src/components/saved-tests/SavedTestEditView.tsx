@@ -10,7 +10,7 @@ import { PageResultList } from "@/components/page-check/PageResultList";
 import { PageEditor, type DraftPage } from "@/components/saved-tests/PageEditor";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import { applyPageCheckEvent, emptyCheckState, type CheckState } from "@/lib/page-check/rows";
-import { failOpenRows, readFailedResponse, readPageCheckStream } from "@/lib/page-check/read-stream";
+import { failOpenRows, readPageCheckBatches } from "@/lib/page-check/read-stream";
 import { PageListError, mergeDiscoveredPages, pagesFromCheckRows, uniquePages } from "@/lib/saved-tests/pages";
 import type { SavedTestRecord } from "@/types/saved-tests";
 
@@ -70,19 +70,22 @@ export function SavedTestEditView() {
   async function regenerate() {
     setReview({ ...emptyCheckState(), running: true });
     try {
-      const response = await fetch("/api/page-check", {
-        method: "POST",
-        headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
-        body: JSON.stringify({
-          siteUrl,
-          loginEmail: email || undefined,
-          loginPassword: password || undefined,
-        }),
-      });
-      if (!response.ok || !response.body) throw await readFailedResponse(response);
-      await readPageCheckStream(response, (event) => {
-        setReview((state) => applyPageCheckEvent(state, event));
-      });
+      await readPageCheckBatches(
+        (resume) =>
+          fetch("/api/page-check", {
+            method: "POST",
+            headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
+            body: JSON.stringify({
+              siteUrl,
+              loginEmail: email || undefined,
+              loginPassword: password || undefined,
+              resume: resume ?? undefined,
+            }),
+          }),
+        (event) => {
+          setReview((state) => applyPageCheckEvent(state, event));
+        },
+      );
     } catch (caught) {
       setReview((state) => failOpenRows(state, messageFrom(caught, "Pages could not be discovered again.")));
     } finally {

@@ -7,7 +7,7 @@ import {
   emptyCheckState,
   type CheckState,
 } from "@/lib/page-check/rows";
-import { failOpenRows, readFailedResponse, readPageCheckStream } from "@/lib/page-check/read-stream";
+import { failOpenRows, readPageCheckBatches } from "@/lib/page-check/read-stream";
 
 interface RetestLogin {
   loginEmail?: string;
@@ -55,18 +55,23 @@ export async function runSavedRetest(id: string, login: RetestLogin) {
   if (current(id).running) return;
   update(id, () => ({ ...emptyCheckState(), running: true }));
   try {
-    const response = await fetch(`/api/saved-tests/${id}/retest`, {
-      method: "POST",
-      headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
-      body: JSON.stringify({
-        loginEmail: login.loginEmail || undefined,
-        loginPassword: login.loginPassword || undefined,
-      }),
-    });
-    if (!response.ok || !response.body) throw await readFailedResponse(response);
-    await readPageCheckStream(response, (event) => {
-      update(id, (state) => applyPageCheckEvent({ ...state, running: true }, event));
-    });
+    await readPageCheckBatches(
+      (resume) =>
+        fetch(`/api/saved-tests/${id}/retest`, {
+          method: "POST",
+          headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
+          body: JSON.stringify({
+            loginEmail: login.loginEmail || undefined,
+            loginPassword: login.loginPassword || undefined,
+            doneUrls: resume?.doneUrls,
+            checked: resume?.checked,
+            failed: resume?.failed,
+          }),
+        }),
+      (event) => {
+        update(id, (state) => applyPageCheckEvent({ ...state, running: true }, event));
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "The retest could not be completed.";
     update(id, (state) => failOpenRows(state, message));

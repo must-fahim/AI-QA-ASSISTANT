@@ -18,4 +18,7 @@ export const updateSavedTestSchema = saveTestSchema;
 export const retestRequestSchema = z.object({
   loginEmail: z.string().trim().max(200).optional(),
   loginPassword: z.string().max(200).optional(),
+  doneUrls: z.array(z.string().trim().min(1).max(2_000)).max(80).optional(),
+  checked: z.number().int().min(0).max(80).optional(),
+  failed: z.number().int().min(0).max(80).optional(),
 });

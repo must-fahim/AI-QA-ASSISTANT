@@ -28,6 +28,11 @@ interface GenerateResponse {
   pageVisit: { finalUrl: string; title: string; controlCount: number } | null;
 }
 
+interface VisitResponse {
+  observedRequirement: string;
+  pageVisit: { finalUrl: string; title: string; controlCount: number } | null;
+}
+
 interface GenerationSession {
   values: GenerateFormValues;
   result: AiGenerationResult;
@@ -110,15 +115,31 @@ export function GenerateView() {
     setError(null);
     setActiveCase(null);
     try {
+      let requirement = values.requirement;
+      if (values.pageUrl) {
+        const visit = await apiFetch<VisitResponse>("/api/generate", {
+          method: "POST",
+          body: JSON.stringify({ ...values, model: selectedModel || undefined, step: "visit" }),
+        });
+        requirement = visit.observedRequirement || values.requirement;
+      }
       const generated = await apiFetch<GenerateResponse>("/api/generate", {
         method: "POST",
-        body: JSON.stringify({ ...values, model: selectedModel || undefined }),
+        body: JSON.stringify({
+          ...values,
+          requirement,
+          pageUrl: undefined,
+          loginEmail: undefined,
+          loginPassword: undefined,
+          model: selectedModel || undefined,
+          step: "generate",
+        }),
       });
       const nextSession: GenerationSession = {
         values: {
           ...values,
           loginPassword: "",
-          requirement: generated.observedRequirement || values.requirement,
+          requirement,
         },
         result: generated.result,
         cases: generated.result.testCases,
