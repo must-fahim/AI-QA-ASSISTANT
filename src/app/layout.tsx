@@ -5,7 +5,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { siteDescription, siteName, siteUrl } from "@/lib/site";
-import "antd/dist/reset.css";
 import "./globals.css";
 
 const geistSans = Geist({

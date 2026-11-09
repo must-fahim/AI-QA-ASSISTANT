@@ -155,12 +155,12 @@ export function SavedTestEditView() {
             Use discovered pages
           </Button>,
         ]}
-        styles={{ body: { display: "flex", flexDirection: "column", maxHeight: "60vh", overflow: "hidden" } }}
+        styles={{ body: { display: "flex", flexDirection: "column", gap: 20, maxHeight: "60vh", overflow: "hidden" } }}
       >
-        <p className="mb-3 shrink-0 text-sm text-[#6b7280]">
+        <p className="m-0 shrink-0 text-sm leading-6 text-[#6b7280]">
           Runs the page check again. The list on this page stays as it is until you use the discovered pages and click Save changes. Pages you added are kept. The login is not stored.
         </p>
-        <div className="mb-3 grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Input value={email} placeholder="Login email" autoComplete="off" onChange={(event) => setEmail(event.target.value)} />
           <Input.Password
             value={password}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Alert, App, Button, Input, Modal, Tag } from "antd";
-import { ArrowLeft, Check, Pencil, Play, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Pencil, Play, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -25,6 +25,7 @@ export function SavedTestDetailView() {
   const [error, setError] = useState<string | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [pagesOpen, setPagesOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -145,10 +146,27 @@ export function SavedTestDetailView() {
       </section>
 
       <section className="rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-sm font-semibold">Saved pages</h2>
-        <p className="mb-3 text-xs text-[#6b7280]">These URLs are tested as they are. Discovery does not run again.</p>
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-[#1c1c1c]">Saved pages</h2>
+            <p className="mt-1 text-xs text-[#6b7280]">
+              {test.pageCount} pages. These URLs are tested as they are. Discovery does not run again.
+            </p>
+          </div>
+          {test.pages.length > 3 ? (
+            <button
+              type="button"
+              className="inline-flex shrink-0 cursor-pointer items-center gap-1 text-xs font-medium text-[#712DC8]"
+              aria-expanded={pagesOpen}
+              onClick={() => setPagesOpen((open) => !open)}
+            >
+              {pagesOpen ? "Show less" : `Show all ${test.pageCount}`}
+              <ChevronDown size={16} aria-hidden className={`transition-transform ${pagesOpen ? "rotate-180" : ""}`} />
+            </button>
+          ) : null}
+        </div>
         <ul className="flex flex-col">
-          {test.pages.map((page, index) => (
+          {(pagesOpen ? test.pages : test.pages.slice(0, 3)).map((page, index) => (
             <PageRow key={page.id} page={page} index={index + 1} />
           ))}
         </ul>
@@ -173,11 +191,11 @@ export function SavedTestDetailView() {
         }
         okText="Start retest"
         onOk={startRetest}
-        styles={{ body: { display: "flex", flexDirection: "column", maxHeight: "60vh", overflow: "hidden" } }}
+        styles={{ body: { display: "flex", flexDirection: "column", gap: 20, maxHeight: "60vh", overflow: "hidden" } }}
       >
         {showResults ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <p className="shrink-0 text-sm text-[#6b7280]">
+          <div className="flex min-h-0 flex-1 flex-col gap-5">
+            <p className="m-0 shrink-0 text-sm leading-6 text-[#6b7280]">
               Checking the {test.pageCount} saved pages. Discovery does not run again.
             </p>
             {retest.error ? <Alert type="error" showIcon title={retest.error} /> : null}
@@ -185,7 +203,7 @@ export function SavedTestDetailView() {
           </div>
         ) : (
           <>
-            <p className="mb-3 text-sm text-[#6b7280]">
+            <p className="m-0 text-sm leading-6 text-[#6b7280]">
               Checks all {test.pageCount} saved pages. Leave these empty when the site does not need a login. The password is not stored.
             </p>
             <div className="flex flex-col gap-3">
