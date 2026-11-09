@@ -8,7 +8,9 @@ import {
   isLoginPath,
   nextPageLinks,
   normalizePageUrl,
+  allowSimilarPage,
   pageLabel,
+  pageShape,
 } from "@/services/page-check/links";
 
 const origin = "https://stg.example.com";
@@ -46,9 +48,19 @@ describe("page check links", () => {
     expect(isDetailActionName("View")).toBe(true);
     expect(isDetailActionName("View details")).toBe(true);
     expect(isDetailActionName("Details")).toBe(true);
+    expect(isDetailActionName("View campaign")).toBe(true);
+    expect(isDetailActionName("View 10")).toBe(false);
     expect(isDetailActionName("Delete")).toBe(false);
     expect(isActionMenuName("Actions")).toBe(true);
     expect(isActionMenuName("View")).toBe(false);
+    expect(pageShape(`${origin}/campaigns/1008`)).toBe("/campaigns/:id");
+    expect(pageShape(`${origin}/campaigns/1328`)).toBe(pageShape(`${origin}/campaigns/1008`));
+    expect(pageShape(`${origin}/report/114`)).toBe("/report/:id");
+    const similar = new Map<string, number>();
+    expect(allowSimilarPage(`${origin}/campaigns/1008`, similar)).toBe(true);
+    expect(allowSimilarPage(`${origin}/campaigns/1328`, similar)).toBe(true);
+    expect(allowSimilarPage(`${origin}/campaigns/1315`, similar)).toBe(false);
+    expect(allowSimilarPage(`${origin}/report/114`, similar)).toBe(true);
   });
 });
 

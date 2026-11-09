@@ -13,7 +13,7 @@ export function isDetailPath(listUrl: string, nextUrl: string) {
   }
 }
 
-const DETAIL_ACTION = /^(view|view details|details|detail|see details|open details)(\b.*)?$/i;
+const DETAIL_ACTION = /^(view|view details|details|detail|see details|open details)(?:\s+(?![\d])[^\d]{0,30})?$/i;
 const ACTION_MENU = /^(more|more actions|actions|options|menu|\.\.\.)$/i;
 const UNSAFE_ACTION = /delete|remove|download|edit|approve|decline|blacklist|logout|sign\s*out/i;
 
@@ -83,6 +83,25 @@ export function pagePath(url: string) {
   return `${parsed.pathname}${parsed.search}` || "/";
 }
 
+const SIMILAR_PAGE_LIMIT = 2;
+
+export function pageShape(url: string) {
+  const path = new URL(url).pathname
+    .split("/")
+    .map((segment) => (isIdSegment(decodeURIComponent(segment)) ? ":id" : segment))
+    .join("/");
+  return path || "/";
+}
+
+export function allowSimilarPage(url: string, counts: Map<string, number>) {
+  const shape = pageShape(url);
+  if (!shape.includes("/:id")) return true;
+  const count = counts.get(shape) ?? 0;
+  if (count >= SIMILAR_PAGE_LIMIT) return false;
+  counts.set(shape, count + 1);
+  return true;
+}
+
 export function nextPageLinks(
   discovered: Array<{ href: string; text: string }>,
   pageUrl: string,
@@ -104,4 +123,11 @@ export function nextPageLinks(
 
 function pathDepth(url: string) {
   return new URL(url).pathname.split("/").filter(Boolean).length;
+}
+
+function isIdSegment(segment: string) {
+  return (
+    /^\d+$/.test(segment) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment)
+  );
 }

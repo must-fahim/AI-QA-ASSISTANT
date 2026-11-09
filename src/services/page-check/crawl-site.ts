@@ -14,6 +14,7 @@ import {
   normalizePageUrl,
   pageLabel,
   pagePath,
+  allowSimilarPage,
 } from "@/services/page-check/links";
 import type { PageCheckEvent } from "@/services/page-check/types";
 
@@ -40,6 +41,7 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
   const password = input.loginPassword ?? "";
   const browser = await launchChromium();
   const seen = new Set<string>();
+  const similarPages = new Map<string, number>();
   const queue: Array<{ url: string; name: string }> = [
     { url: start.toString(), name: pageLabel(start.toString()) },
   ];
@@ -57,7 +59,7 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
 
     while (queue.length > 0 && checked < MAX_PAGES) {
       const current = queue.shift();
-      if (!current || seen.has(current.url)) continue;
+      if (!current || seen.has(current.url) || !allowSimilarPage(current.url, similarPages)) continue;
       seen.add(current.url);
       emit({ type: "checking", url: current.url, name: current.name, path: pagePath(current.url) });
 
@@ -81,9 +83,9 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
         if (recorded.status === "failed") failed += 1;
         checked += 1;
         seen.add(recorded.url);
-        const firstDetail = await checkFirstDetail(page, recorded, origin, seen, emit, password);
-        if (firstDetail === "failed") failed += 1;
-        if (firstDetail) checked += 1;
+        const details = await checkPageDetails(page, recorded, origin, seen, similarPages, emit, password);
+        checked += details.checked;
+        failed += details.failed;
         if (!menuDiscovered && recorded.status === "loaded") {
           menuDiscovered = true;
           const discovered = await discoverMenuPages(page, origin, seen);
@@ -102,9 +104,9 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
               if (!menuRecord || menuRecord.status === "failed") failed += 1;
               checked += 1;
               if (menuRecord?.status === "loaded" && checked < MAX_PAGES) {
-                const detail = await checkFirstDetail(page, menuRecord, origin, seen, emit, password);
-                if (detail === "failed") failed += 1;
-                if (detail) checked += 1;
+                const details = await checkPageDetails(page, menuRecord, origin, seen, similarPages, emit, password);
+                checked += details.checked;
+                failed += details.failed;
               }
               if (menuRecord && queueLinks(menuRecord.links, menuRecord.pageUrl, origin, seen, queue)) {
                 truncated = true;
@@ -170,9 +172,10 @@ async function recordPage(
   });
   const normalized = normalizePageUrl(finalUrl, finalUrl, origin) ?? stripSearch(finalUrl);
   const linkName = isLoginPath(current.url) ? "" : current.name;
-  const name = current.name.endsWith(" detail")
-    ? current.name
-    : displayName(normalized, linkName, snapshot.active, snapshot.title);
+  const name =
+    current.name.endsWith(" detail") || /details$/i.test(current.name)
+      ? current.name
+      : displayName(normalized, linkName, snapshot.active, snapshot.title);
   emit({
     type: "result",
     url: current.url,
@@ -184,19 +187,86 @@ async function recordPage(
   return { url: normalized, pageUrl: finalUrl, name, status: outcome.status, links: snapshot.links };
 }
 
-async function checkFirstDetail(
+async function checkPageDetails(
   page: Page,
   list: RecordedPage,
   origin: string,
   seen: Set<string>,
+  similarPages: Map<string, number>,
   emit: (event: PageCheckEvent) => void,
   password: string,
-): Promise<"loaded" | "failed" | null> {
-  if (seen.size >= MAX_PAGES) return null;
-  const listUrl = page.url();
-  const opened = await clickDetailTarget(page);
-  if (!opened) return null;
+) {
+  const totals = { checked: 0, failed: 0 };
+  if (seen.size >= MAX_PAGES) return totals;
+  const listUrl = list.pageUrl;
+  await revealTables(page);
 
+  const antTables = page.locator(".ant-table");
+  const antCount = await antTables.count();
+  const tables = antCount > 0 ? antTables : page.locator("table");
+  const tableCount = antCount > 0 ? antCount : await tables.count();
+  let opened = 0;
+
+  for (let tableIndex = 0; tableIndex < tableCount && seen.size < MAX_PAGES; tableIndex += 1) {
+    const rows = tables.nth(tableIndex).locator("tbody tr");
+    const rowCount = await rows.count();
+    let openedFromTable = 0;
+    for (
+      let rowIndex = 0;
+      rowIndex < Math.min(rowCount, 20) && openedFromTable < 2 && seen.size < MAX_PAGES;
+      rowIndex += 1
+    ) {
+      if (!samePath(page.url(), listUrl)) await returnToList(page, listUrl);
+      const row = tables.nth(tableIndex).locator("tbody tr").nth(rowIndex);
+      const text = (await row.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+      if (!isDataRowText(text)) continue;
+      const before = page.url();
+      const kind = await clickRowTarget(page, row);
+      if (!kind) continue;
+      const outcome = await acceptOpenedDetail(page, list, before, kind, origin, seen, similarPages, emit, password);
+      if (outcome === "repeat") {
+        await returnToList(page, listUrl);
+        break;
+      }
+      if (!outcome) {
+        if (page.url() !== before) await returnToList(page, listUrl);
+        continue;
+      }
+      opened += 1;
+      openedFromTable += 1;
+      totals.checked += 1;
+      if (outcome === "failed") totals.failed += 1;
+      await returnToList(page, listUrl);
+    }
+  }
+
+  if (opened === 0 && seen.size < MAX_PAGES) {
+    const before = page.url();
+    const kind = await clickDetailTarget(page);
+    if (kind) {
+      const outcome = await acceptOpenedDetail(page, list, before, kind, origin, seen, similarPages, emit, password);
+      if (outcome === "loaded" || outcome === "failed") {
+        totals.checked += 1;
+        if (outcome === "failed") totals.failed += 1;
+      }
+    }
+  }
+
+  if (!samePath(page.url(), listUrl)) await returnToList(page, listUrl);
+  return totals;
+}
+
+async function acceptOpenedDetail(
+  page: Page,
+  list: RecordedPage,
+  listUrl: string,
+  opened: "action" | "row",
+  origin: string,
+  seen: Set<string>,
+  similarPages: Map<string, number>,
+  emit: (event: PageCheckEvent) => void,
+  password: string,
+): Promise<"loaded" | "failed" | "repeat" | null> {
   await page
     .waitForFunction((previous) => location.href !== previous, listUrl, { timeout: 3_000 })
     .catch(() => undefined);
@@ -229,14 +299,13 @@ async function checkFirstDetail(
         return outcome.status;
       }
     }
-    if (landed !== listUrl) {
-      await page.goto(listUrl, { waitUntil: "domcontentloaded", timeout: 20_000 }).catch(() => undefined);
-    }
     return null;
   }
 
   seen.add(normalized);
-  const name = `${list.name} detail`;
+  if (!allowSimilarPage(normalized, similarPages)) return "repeat";
+  const heading = await detailHeading(page);
+  const name = heading || `${list.name} detail`;
   emit({ type: "checking", url: normalized, name, path: pagePath(normalized) });
   try {
     const recorded = await recordPage(page, { url: normalized, name }, null, origin, emit);
@@ -247,6 +316,68 @@ async function checkFirstDetail(
     emit(resultEvent({ url: normalized, name }, "failed", "Failed to load"));
     return "failed";
   }
+}
+
+async function returnToList(page: Page, listUrl: string) {
+  await page.goto(listUrl, { waitUntil: "domcontentloaded", timeout: 20_000 }).catch(() => undefined);
+  await revealTables(page);
+}
+
+async function revealTables(page: Page) {
+  const table = page.locator(".ant-table, table").first();
+  if ((await table.count()) > 0) await table.scrollIntoViewIfNeeded().catch(() => undefined);
+  await page
+    .waitForFunction(() => {
+      const rows = [...document.querySelectorAll(".ant-table-tbody tr, table tbody tr")];
+      return rows.some((row) => {
+        const text = ((row as HTMLElement).innerText || "").replace(/\s+/g, " ").trim();
+        return text.length >= 12 && !/^(no\.?\b|registration date|date\b|search\b)/i.test(text);
+      });
+    }, { timeout: 8_000 })
+    .catch(() => undefined);
+}
+
+async function detailHeading(page: Page) {
+  await page
+    .waitForFunction(() => /details/i.test(document.body?.innerText || ""), { timeout: 4_000 })
+    .catch(() => undefined);
+  return page.evaluate(() => {
+    const text = (document.body?.innerText || "").replace(/\s+/g, " ");
+    const match = text.match(/\b([A-Za-z][A-Za-z ]{2,30}?Details)\b/);
+    return match?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+  });
+}
+
+async function clickRowTarget(page: Page, row: ReturnType<Page["locator"]>): Promise<"action" | "row" | null> {
+  const before = page.url();
+  const tried =
+    (await clickNamedDetail(row)) || (await clickContentLink(page, row)) || (await clickPopoverDetail(page, row));
+  if (tried) {
+    const moved = await page
+      .waitForFunction((previous) => location.href !== previous, before, { timeout: 1_500 })
+      .then(() => true)
+      .catch(() => false);
+    if (moved || (await readOpenDetail(page))) return "action";
+  }
+
+  const cells = row.locator("td");
+  const cellCount = await cells.count();
+  for (let cellIndex = 0; cellIndex < cellCount; cellIndex += 1) {
+    const cell = cells.nth(cellIndex);
+    const cellText = (await cell.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+    if (!cellText || cellText.length > 80) continue;
+    if (await cell.locator("input, button, a").count()) continue;
+    if (/delete|remove|download|blacklist|approve|decline/i.test(cellText)) continue;
+    await cell.click({ timeout: 3_000 }).catch(() => undefined);
+    const moved = await page
+      .waitForFunction((previous) => location.href !== previous, before, { timeout: 1_500 })
+      .then(() => true)
+      .catch(() => false);
+    if (moved) return "row";
+    break;
+  }
+  await row.click({ timeout: 3_000 }).catch(() => undefined);
+  return "row";
 }
 
 async function clickDetailTarget(page: Page): Promise<"action" | "row" | null> {
@@ -283,7 +414,14 @@ async function clickDetailTarget(page: Page): Promise<"action" | "row" | null> {
   }
 
   const root = (await page.locator("main").count()) > 0 ? page.locator("main").first() : page.locator("body");
-  if (await clickNamedDetail(root)) return "action";
+  const beforeRoot = page.url();
+  if (await clickNamedDetail(root)) {
+    const moved = await page
+      .waitForFunction((previous) => location.href !== previous, beforeRoot, { timeout: 1_500 })
+      .then(() => true)
+      .catch(() => false);
+    if (moved || (await readOpenDetail(page))) return "action";
+  }
 
   for (let index = 0; index < Math.min(count, 12); index += 1) {
     const row = rows.nth(index);
@@ -313,9 +451,7 @@ async function clickNamedDetail(scope: ReturnType<Page["locator"]>) {
     .first();
   if ((await action.count()) === 0) return false;
   const label = `${await action.innerText().catch(() => "")} ${await action.getAttribute("aria-label").catch(() => "")}`;
-  if (!isDetailActionName(label) && !/^(view|view details|details|detail|see details)\b/i.test(label.trim())) {
-    return false;
-  }
+  if (!isDetailActionName(label)) return false;
   await action.click({ timeout: 3_000 }).catch(() => undefined);
   return true;
 }
@@ -444,8 +580,13 @@ async function waitForContent(page: Page) {
 
 async function readSnapshot(page: Page): Promise<PageSnapshot> {
   return page.evaluate(() => {
-    const active =
-      document.querySelector(".ant-menu-item-selected, [aria-current='page']")?.textContent ?? "";
+    const items = [...document.querySelectorAll("aside a, aside button, nav a, nav button, .ant-menu-item")];
+    const selected = items.find((item) => {
+      const className = String(item.className || "");
+      if (item.getAttribute("aria-current") === "page" || item.classList.contains("ant-menu-item-selected")) return true;
+      return /\b(bg-soft|text-primary|router-link-active)\b/.test(className) && !/\btext-font-soft\b/.test(className);
+    });
+    const active = (selected?.textContent || "").replace(/\s+/g, " ").trim();
     const links = [...document.querySelectorAll("a[href]")]
       .slice(0, 80)
       .map((anchor) => ({
