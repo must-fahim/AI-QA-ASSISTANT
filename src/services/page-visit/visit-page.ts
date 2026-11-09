@@ -2,7 +2,7 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { assertPublicHttpUrl } from "@/lib/page-visit/public-url";
 import type { PageObservation } from "@/services/page-visit/compose-requirement";
-import { launchChromium, openPage, safeMessage, signIn } from "@/services/page-visit/browser";
+import { closeBrowser, launchChromium, openPage, safeMessage, signIn } from "@/services/page-visit/browser";
 
 interface VisitInput {
   url: string;
@@ -74,6 +74,6 @@ export async function visitPage(input: VisitInput): Promise<PageObservation> {
       "PAGE_VISIT_FAILED",
     );
   } finally {
-    await browser.close();
+    await closeBrowser(browser);
   }
 }

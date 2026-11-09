@@ -1,19 +1,60 @@
 import { createRequire } from "node:module";
-import type { Page } from "playwright";
+import type { Browser, Page } from "playwright";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 
-export async function launchChromium() {
+export async function launchChromium(): Promise<Browser> {
+  try {
+    if (process.env.VERCEL === "1") return await launchServerlessChromium();
+    return await launchLocalChromium();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw browserLaunchError(error);
+  }
+}
+
+async function launchLocalChromium() {
   const { chromium } = createRequire(`${process.cwd()}/package.json`)("playwright") as typeof import("playwright");
-  return chromium.launch({ headless: true }).catch((error: unknown) => {
-    logger.error("page browser failed to launch", {
-      message: error instanceof Error ? error.message.slice(0, 300) : "launch failed",
+  return chromium.launch({ headless: true });
+}
+
+async function launchServerlessChromium(): Promise<Browser> {
+  const [{ default: chromium }, { chromium: playwright }] = await Promise.all([
+    import("@sparticuz/chromium"),
+    import("playwright-core"),
+  ]);
+  chromium.setGraphicsMode = false;
+  const browser = await playwright.launch({
+    args: chromium.args,
+    executablePath: await chromium.executablePath(),
+    headless: true,
+  });
+  return browser as unknown as Browser;
+}
+
+function browserLaunchError(error: unknown) {
+  const message = error instanceof Error ? error.message : "launch failed";
+  logger.error("page browser failed to launch", { message: message.slice(0, 300) });
+  const lower = message.toLowerCase();
+  if (lower.includes("enomem") || lower.includes("out of memory") || lower.includes("insufficient memory")) {
+    return new AppError("The server ran out of memory while starting the browser.", 503, "PAGE_BROWSER_MEMORY");
+  }
+  if (process.env.VERCEL === "1") {
+    return new AppError("The page browser could not start on the server.", 503, "PAGE_BROWSER_MISSING");
+  }
+  return new AppError(
+    "The page browser is not installed. Run npx playwright install chromium, then try again.",
+    503,
+    "PAGE_BROWSER_MISSING",
+  );
+}
+
+export async function closeBrowser(browser: Pick<Browser, "close"> | null | undefined) {
+  if (!browser) return;
+  await browser.close().catch((error: unknown) => {
+    logger.error("page browser failed to close", {
+      message: error instanceof Error ? error.message.slice(0, 300) : "close failed",
     });
-    throw new AppError(
-      "The page browser is not installed. Run npx playwright install chromium, then try again.",
-      503,
-      "PAGE_BROWSER_MISSING",
-    );
   });
 }
 

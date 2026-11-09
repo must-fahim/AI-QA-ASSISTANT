@@ -10,6 +10,7 @@ import { retestRequestSchema } from "@/schemas/saved-tests";
 import { getSavedTest, markSavedTestRun } from "@/repositories/saved-tests/saved-test.repository";
 import { retestSavedPages } from "@/services/page-check/retest-pages";
 
+export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export const POST = withErrorHandling(async (request: Request, context: RetestCo
         pages: saved.pages.map((page) => ({ name: page.name, url: page.url })),
       },
       emit,
+      (result) => markSavedTestRun(id, [result], user.id).then(() => undefined),
     );
     await markSavedTestRun(id, outcome.results, user.id);
     logger.info("saved page retest stored", { testId: id, checked: outcome.checked, failed: outcome.failed });
