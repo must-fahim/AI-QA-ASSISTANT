@@ -53,13 +53,19 @@ describe("saved page lists", () => {
     ]);
   });
 
-  it("builds a discovered list from finished check rows", () => {
+  it("keeps every finished check row, including a detail on the same page", () => {
     const pages = pagesFromCheckRows(site, [
       { name: "Home", path: "/", url: "https://example.com/login", state: "loaded" },
       { name: "Panel", path: "/pricing", url: "https://example.com/pricing#detail", state: "loaded" },
       { name: "Pricing", path: "/pricing", url: "https://example.com/pricing", state: "failed" },
+      { name: "Pricing again", path: "/pricing", url: "https://example.com/pricing", state: "loaded" },
     ]);
-    expect(pages.map((page) => page.url)).toEqual(["https://example.com/", "https://example.com/pricing"]);
-    expect(pages[1]?.lastStatus).toBe("failed");
+    expect(pages.map((page) => page.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/pricing#detail",
+      "https://example.com/pricing",
+      "https://example.com/pricing#2",
+    ]);
+    expect(pages).toHaveLength(4);
   });
 });
