@@ -11,7 +11,7 @@ import { getSavedTest, markSavedTestRun } from "@/repositories/saved-tests/saved
 import { retestSavedPages } from "@/services/page-check/retest-pages";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 800;
 export const dynamic = "force-dynamic";
 
 interface RetestContext {

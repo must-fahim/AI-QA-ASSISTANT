@@ -6,7 +6,7 @@ import { pageCheckRequestSchema } from "@/schemas/page-check";
 import { crawlSite } from "@/services/page-check/crawl-site";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 800;
 export const dynamic = "force-dynamic";
 
 export const POST = withErrorHandling(async (request: Request) => {
