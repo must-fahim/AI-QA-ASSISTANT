@@ -13,6 +13,7 @@ import {
   isLoginPath,
   nextPageLinks,
   normalizePageUrl,
+  detailPageName,
   pageLabel,
   pagePath,
   pageShape,
@@ -387,7 +388,7 @@ async function acceptOpenedDetail(
   seen.add(normalized);
   if (!allowSimilarPage(normalized, similarPages)) return "repeat";
   const heading = await detailHeading(page);
-  const name = heading || `${list.name} detail`;
+  const name = detailPageName(list.name, heading);
   emit({ type: "checking", url: normalized, name, path: pagePath(normalized) });
   try {
     const recorded = await recordPage(page, { url: normalized, name }, null, origin, emit);

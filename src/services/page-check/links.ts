@@ -66,6 +66,25 @@ export function normalizePageUrl(rawHref: string, pageUrl: string, origin: strin
   return url.toString();
 }
 
+const DETAIL_NAME_SKIP = new Set(["detail", "details", "management", "page", "list", "the", "and", "for"]);
+
+export function detailPageName(listName: string, heading: string) {
+  const list = listName.replace(/\s+/g, " ").trim();
+  const title = heading.replace(/\s+/g, " ").trim();
+  const listWords = nameWords(list);
+  const related = title.length > 0 && title.length <= 80 && listWords.some((word) => nameWords(title).includes(word));
+  if (!list) return title || "Detail";
+  if (related) return title;
+  return `${list} detail`;
+}
+
+function nameWords(value: string) {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 2 && !DETAIL_NAME_SKIP.has(word));
+}
+
 export function pageLabel(url: string, preferred?: string) {
   const text = preferred?.replace(/\s+/g, " ").trim() ?? "";
   if (text && text.length <= 60 && !/^https?:/i.test(text) && !SKIP_TEXT.test(text)) return text;

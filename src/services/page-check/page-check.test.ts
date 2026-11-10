@@ -10,6 +10,7 @@ import {
   nextPageLinks,
   normalizePageUrl,
   allowSimilarPage,
+  detailPageName,
   pageLabel,
   pageShape,
 } from "@/services/page-check/links";
@@ -45,6 +46,10 @@ describe("page check links", () => {
       `${origin}/campaigns/42`,
     );
     expect(pageLabel(`${origin}/create-campaign`, "Create Campaign")).toBe("Create Campaign");
+    expect(detailPageName("Solo Pay", "time Category Details")).toBe("Solo Pay detail");
+    expect(detailPageName("Advertiser members", "Advertiser Member Management Details")).toBe(
+      "Advertiser Member Management Details",
+    );
     expect(isLoginPath(`${origin}/login`)).toBe(true);
     expect(isLoginPath(`${origin}/dashboard`)).toBe(false);
     expect(

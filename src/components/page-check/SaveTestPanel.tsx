@@ -23,9 +23,38 @@ export function SaveTestPanel({
   const router = useRouter();
   const [name, setName] = useState("");
   const [manual, setManual] = useState<DraftPage[]>([]);
+  const [removedUrls, setRemovedUrls] = useState<string[]>([]);
+  const [renamed, setRenamed] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const discovered = siteUrl ? pagesFromCheckRows(siteUrl, rows).map((page) => ({ ...page, key: page.url })) : [];
+  const found = siteUrl ? pagesFromCheckRows(siteUrl, rows) : [];
+  const discovered = found
+    .filter((page) => !removedUrls.includes(page.url))
+    .map((page) => ({ ...page, key: page.url, name: renamed[page.url] ?? page.name }));
   const pages = [...discovered, ...manual];
+
+  function applyList(next: DraftPage[]) {
+    setManual(next.filter((page) => page.source === "manual"));
+    const kept = new Set(next.filter((page) => page.source === "discovered").map((page) => page.url));
+    setRemovedUrls((current) => {
+      const removed = new Set(current);
+      for (const page of found) {
+        if (kept.has(page.url)) removed.delete(page.url);
+        else removed.add(page.url);
+      }
+      return [...removed];
+    });
+    setRenamed((current) => {
+      const names = { ...current };
+      for (const page of next) {
+        if (page.source !== "discovered") continue;
+        const original = found.find((item) => item.url === page.url);
+        if (!original) continue;
+        if (page.name === original.name) delete names[page.url];
+        else names[page.url] = page.name;
+      }
+      return names;
+    });
+  }
 
   async function save() {
     const website = name.replace(/\s+/g, " ").trim();
@@ -79,9 +108,10 @@ export function SaveTestPanel({
         pages={pages}
         lockDiscovered
         disabled={running || !siteUrl}
-        onChange={(next) => setManual(next.filter((page) => page.source === "manual"))}
+        scrollable
+        onChange={applyList}
       />
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[#f3f4f6] pt-4">
         <Button
           type="primary"
           icon={<Save size={16} />}
