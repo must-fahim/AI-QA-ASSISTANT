@@ -118,7 +118,7 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
         if (recorded.status === "failed") failed += 1;
         checked += 1;
         seen.add(recorded.url);
-        const details = await checkPageDetails(page, recorded, origin, seen, similarPages, emit, password, () =>
+        const details = await readPageDetails(page, recorded, origin, seen, similarPages, emit, password, () =>
           batchExpired(startedAt),
         );
         if (details.paused) {
@@ -137,7 +137,7 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
         failed += details.failed;
         if (!menuDiscovered && recorded.status === "loaded") {
           menuDiscovered = true;
-          const discovered = await discoverMenuPages(page, origin, seen);
+          const discovered = await readMenuPages(page, origin, seen, password);
           for (let index = 0; index < discovered.length; index += 1) {
             if (batchExpired(startedAt)) {
               for (const rest of discovered.slice(index).reverse()) {
@@ -161,7 +161,7 @@ export async function crawlSite(input: CrawlInput, emit: (event: PageCheckEvent)
               if (!menuRecord || menuRecord.status === "failed") failed += 1;
               checked += 1;
               if (menuRecord?.status === "loaded" && checked < MAX_PAGES) {
-                const details = await checkPageDetails(page, menuRecord, origin, seen, similarPages, emit, password, () =>
+                const details = await readPageDetails(page, menuRecord, origin, seen, similarPages, emit, password, () =>
                   batchExpired(startedAt),
                 );
                 checked += details.checked;
@@ -251,6 +251,35 @@ async function recordPage(
     detail: outcome.detail,
   });
   return { url: normalized, pageUrl: finalUrl, name, status: outcome.status, links: snapshot.links };
+}
+
+async function readPageDetails(
+  page: Page,
+  list: RecordedPage,
+  origin: string,
+  seen: Set<string>,
+  similarPages: Map<string, number>,
+  emit: (event: PageCheckEvent) => void,
+  password: string,
+  shouldPause: () => boolean,
+) {
+  try {
+    return await checkPageDetails(page, list, origin, seen, similarPages, emit, password, shouldPause);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    logger.error("page check details failed", { message: safeMessage(error, password) });
+    return { checked: 0, failed: 0, paused: false };
+  }
+}
+
+async function readMenuPages(page: Page, origin: string, seen: Set<string>, password: string) {
+  try {
+    return await discoverMenuPages(page, origin, seen);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    logger.error("page check menu discovery failed", { message: safeMessage(error, password) });
+    return [];
+  }
 }
 
 async function checkPageDetails(
@@ -617,40 +646,111 @@ async function discoverMenuPages(page: Page, origin: string, seen: Set<string>) 
     }
   };
 
-  await collect();
+  const collected = await runMenuStep(page, collect);
+  if (!collected.ok) return menuPages(found);
   const clicked = new Set<string>();
+  let missedReads = 0;
   for (let step = 0; step < 40; step += 1) {
-    const labels = await page.locator("aside button, nav button, .ant-layout-sider button").evaluateAll((buttons) => {
-      const values = buttons
-        .map((button) => (button.textContent || "").replace(/\s+/g, " ").trim())
-        .filter((text) => text.length > 1 && text.length <= 80 && !/^(log\s*out|sign\s*out|logout)$/i.test(text));
-      return [...new Set(values)];
-    });
-    const next = labels.find((label) => !clicked.has(label));
+    const labels = await runMenuStep(page, () =>
+      page.locator("aside button, nav button, .ant-layout-sider button").evaluateAll((buttons) => {
+        const values = buttons
+          .map((button) => (button.textContent || "").replace(/\s+/g, " ").trim())
+          .filter((text) => text.length > 1 && text.length <= 80 && !/^(log\s*out|sign\s*out|logout)$/i.test(text));
+        return [...new Set(values)];
+      }),
+    );
+    if (!labels.ok) {
+      if (labels.closed || missedReads >= 2) break;
+      missedReads += 1;
+      continue;
+    }
+    missedReads = 0;
+    const next = labels.value.find((label) => !clicked.has(label));
     if (!next) break;
     clicked.add(next);
-    const before = page.url();
-    const clickedButton = await page.evaluate((label) => {
-      const buttons = [...document.querySelectorAll("aside button, nav button, .ant-layout-sider button")];
-      const match = buttons.find((button) => (button.textContent || "").replace(/\s+/g, " ").trim() === label);
-      if (!match) return false;
-      match.scrollIntoView({ block: "center" });
-      if (match instanceof HTMLElement) match.click();
-      return true;
-    }, next);
-    if (!clickedButton) continue;
-    const moved = await page
-      .waitForFunction((previous) => location.href !== previous, before, { timeout: 600 })
-      .then(() => true)
-      .catch(() => false);
-    if (moved) {
-      const normalized = normalizePageUrl(page.url(), page.url(), origin);
-      if (normalized && !seen.has(normalized) && !found.has(normalized)) found.set(normalized, next);
+    let before = "";
+    try {
+      before = page.url();
+    } catch {
+      break;
     }
-    await collect();
+    const clickedButton = await runMenuStep(page, async () => {
+      const didClick = await page.evaluate((label) => {
+        const buttons = [...document.querySelectorAll("aside button, nav button, .ant-layout-sider button")];
+        const match = buttons.find((button) => (button.textContent || "").replace(/\s+/g, " ").trim() === label);
+        if (!match) return false;
+        match.scrollIntoView({ block: "center" });
+        if (match instanceof HTMLElement) match.click();
+        return true;
+      }, next);
+      if (!didClick) return false;
+      await page
+        .waitForFunction((previous) => location.href !== previous, before, { timeout: 2_500 })
+        .catch(() => undefined);
+      await settlePage(page);
+      rememberLanded(page, before, next, origin, seen, found);
+      await collect();
+      return true;
+    });
+    if (!clickedButton.ok) {
+      if (!clickedButton.closed) {
+        await settlePage(page);
+        rememberLanded(page, before, next, origin, seen, found);
+      }
+      if (clickedButton.closed) break;
+    }
   }
 
+  return menuPages(found);
+}
+
+async function runMenuStep<T>(page: Page, step: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; closed: boolean }> {
+  try {
+    return { ok: true, value: await step() };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    logger.error("page check menu step failed", { message: errorText(error) });
+    const closed = pageClosed(error);
+    if (!closed) await settlePage(page);
+    return { ok: false, closed };
+  }
+}
+
+function menuPages(found: Map<string, string>) {
   return [...found.entries()].map(([url, name]) => ({ url, name }));
+}
+
+async function settlePage(page: Page) {
+  await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => undefined);
+  await waitForContent(page);
+}
+
+function rememberLanded(
+  page: Page,
+  before: string,
+  name: string,
+  origin: string,
+  seen: Set<string>,
+  found: Map<string, string>,
+) {
+  let current = "";
+  try {
+    current = page.url();
+  } catch {
+    return;
+  }
+  if (!current || current === before) return;
+  const normalized = normalizePageUrl(current, current, origin);
+  if (!normalized || seen.has(normalized) || found.has(normalized)) return;
+  found.set(normalized, name);
+}
+
+function errorText(error: unknown) {
+  return (error instanceof Error ? error.message : "page check failed").slice(0, 300);
+}
+
+function pageClosed(error: unknown) {
+  return /target closed|has been closed|page crashed/i.test(errorText(error));
 }
 
 function restoreCrawl(
@@ -740,7 +840,7 @@ async function waitForContent(page: Page) {
       () =>
         (document.body?.innerText?.trim().length ?? 0) > 20 ||
         document.querySelector('input[type="password"]') != null,
-      { timeout: 10_000 },
+      { timeout: 20_000 },
     )
     .catch(() => undefined);
 }
