@@ -9,7 +9,7 @@ import { toast } from "react-toastify";
 import { PageResultList } from "@/components/page-check/PageResultList";
 import { apiFetch } from "@/lib/api/client";
 import { formatTimestamp } from "@/lib/format";
-import { runSavedRetest, takeQueuedRetest, useRetestState } from "@/lib/saved-tests/retest-store";
+import { runSavedRetest, stopSavedRetest, takeQueuedRetest, useRetestState } from "@/lib/saved-tests/retest-store";
 import type { SavedPageRecord, SavedTestRecord } from "@/types/saved-tests";
 
 export function SavedTestDetailView() {
@@ -180,9 +180,21 @@ export function SavedTestDetailView() {
         footer={
           showResults
             ? [
-                <Button key="again" type="primary" icon={<Play size={16} />} disabled={retest.running} onClick={startRetest}>
-                  Retest again
-                </Button>,
+                retest.running ? (
+                  <button
+                    key="stop"
+                    type="button"
+                    onClick={() => stopSavedRetest(id)}
+                    className="inline-flex h-8 items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-4 text-sm font-medium text-[#1c1c1c] transition-colors hover:border-[#f87171] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+                  >
+                    <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
+                    Stop retest
+                  </button>
+                ) : (
+                  <Button key="again" type="primary" icon={<Play size={16} />} onClick={startRetest}>
+                    Retest again
+                  </Button>
+                ),
                 <Button key="close" onClick={closeRetest}>
                   {retest.running ? "Hide" : "Close"}
                 </Button>,

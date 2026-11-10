@@ -14,11 +14,13 @@ export function PageEditor({
   pages,
   onChange,
   lockDiscovered = false,
+  disabled = false,
 }: {
   siteUrl: string;
   pages: DraftPage[];
   onChange: (pages: DraftPage[]) => void;
   lockDiscovered?: boolean;
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState<{ key: string | null; name: string; url: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function PageEditor({
         <p className="text-xs text-[#6b7280]">
           Discovered {discovered} · Added {manual} · Total {pages.length}
         </p>
-        <Button icon={<Plus size={16} />} onClick={openAdd}>
+        <Button icon={<Plus size={16} />} onClick={openAdd} disabled={disabled || !siteUrl}>
           Add page
         </Button>
       </div>
@@ -86,12 +88,13 @@ export function PageEditor({
               </div>
               {locked ? null : (
                 <div className="flex shrink-0">
-                  <Button type="text" aria-label={`Edit ${page.name}`} icon={<Pencil size={16} />} onClick={() => openEdit(page)} />
+                  <Button type="text" aria-label={`Edit ${page.name}`} icon={<Pencil size={16} />} disabled={disabled} onClick={() => openEdit(page)} />
                   <Button
                     type="text"
                     danger
                     aria-label={`Remove ${page.name}`}
                     icon={<Trash2 size={16} />}
+                    disabled={disabled}
                     onClick={() => onChange(pages.filter((item) => item.key !== page.key))}
                   />
                 </div>

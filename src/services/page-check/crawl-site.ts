@@ -265,6 +265,8 @@ async function checkPageDetails(
   const totals = { checked: 0, failed: 0, paused: false };
   if (seen.size >= MAX_PAGES) return totals;
   const listUrl = list.pageUrl;
+  const deadline = Date.now() + 8_000;
+  const stop = () => shouldPause() || Date.now() >= deadline;
   await revealTables(page);
 
   const antTables = page.locator(".ant-table");
@@ -277,13 +279,14 @@ async function checkPageDetails(
     const rows = tables.nth(tableIndex).locator("tbody tr");
     const rowCount = await rows.count();
     let openedFromTable = 0;
+    let misses = 0;
     for (
       let rowIndex = 0;
-      rowIndex < Math.min(rowCount, 20) && openedFromTable < 2 && seen.size < MAX_PAGES;
+      rowIndex < Math.min(rowCount, 20) && openedFromTable < 2 && misses < 3 && seen.size < MAX_PAGES;
       rowIndex += 1
     ) {
-      if (shouldPause()) {
-        totals.paused = true;
+      if (stop()) {
+        totals.paused = shouldPause();
         return totals;
       }
       if (!samePath(page.url(), listUrl)) await returnToList(page, listUrl);
@@ -292,13 +295,17 @@ async function checkPageDetails(
       if (!isDataRowText(text)) continue;
       const before = page.url();
       const kind = await clickRowTarget(page, row);
-      if (!kind) continue;
+      if (!kind) {
+        misses += 1;
+        continue;
+      }
       const outcome = await acceptOpenedDetail(page, list, before, kind, origin, seen, similarPages, emit, password);
       if (outcome === "repeat") {
         await returnToList(page, listUrl);
         break;
       }
       if (!outcome) {
+        misses += 1;
         if (page.url() !== before) await returnToList(page, listUrl);
         continue;
       }
@@ -310,8 +317,8 @@ async function checkPageDetails(
     }
   }
 
-  if (shouldPause()) {
-    totals.paused = true;
+  if (stop()) {
+    totals.paused = shouldPause();
     return totals;
   }
 
@@ -408,7 +415,7 @@ async function revealTables(page: Page) {
         const text = ((row as HTMLElement).innerText || "").replace(/\s+/g, " ").trim();
         return text.length >= 12 && !/^(no\.?\b|registration date|date\b|search\b)/i.test(text);
       });
-    }, { timeout: 8_000 })
+    }, { timeout: 2_000 })
     .catch(() => undefined);
 }
 
@@ -452,7 +459,12 @@ async function clickRowTarget(page: Page, row: ReturnType<Page["locator"]>): Pro
     break;
   }
   await row.click({ timeout: 3_000 }).catch(() => undefined);
-  return "row";
+  const rowMoved = await page
+    .waitForFunction((previous) => location.href !== previous, before, { timeout: 1_500 })
+    .then(() => true)
+    .catch(() => false);
+  if (rowMoved || (await readOpenDetail(page))) return "row";
+  return null;
 }
 
 async function clickDetailTarget(page: Page): Promise<"action" | "row" | null> {
@@ -510,11 +522,15 @@ async function clickDetailTarget(page: Page): Promise<"action" | "row" | null> {
       if (!cellText || cellText.length > 80) continue;
       if (await cell.locator("input, button, a").count()) continue;
       if (/delete|remove|download|blacklist|approve|decline/i.test(cellText)) continue;
+      const beforeCell = page.url();
       await cell.click({ timeout: 3_000 }).catch(() => undefined);
-      return "row";
+      const cellMoved = await page
+        .waitForFunction((previous) => location.href !== previous, beforeCell, { timeout: 1_500 })
+        .then(() => true)
+        .catch(() => false);
+      if (cellMoved || (await readOpenDetail(page))) return "row";
+      break;
     }
-    await row.click({ timeout: 3_000 }).catch(() => undefined);
-    return "row";
   }
   return null;
 }
@@ -585,11 +601,25 @@ async function readOpenDetail(page: Page) {
 }
 
 async function discoverMenuPages(page: Page, origin: string, seen: Set<string>) {
-  const clicked = new Set<string>();
   const found = new Map<string, string>();
+  const collect = async () => {
+    const links = await page.locator("aside a[href], nav a[href], .ant-layout-sider a[href]").evaluateAll((anchors) =>
+      anchors.map((anchor) => ({
+        href: anchor.getAttribute("href") ?? "",
+        text: (anchor.textContent || "").replace(/\s+/g, " ").trim(),
+      })),
+    );
+    for (const link of links) {
+      const url = normalizePageUrl(link.href, page.url(), origin);
+      if (!url || seen.has(url) || found.has(url)) continue;
+      found.set(url, link.text.slice(0, 80) || pageLabel(url));
+    }
+  };
 
+  await collect();
+  const clicked = new Set<string>();
   for (let step = 0; step < 40; step += 1) {
-    const labels = await page.locator("aside button, nav button").evaluateAll((buttons) => {
+    const labels = await page.locator("aside button, nav button, .ant-layout-sider button").evaluateAll((buttons) => {
       const values = buttons
         .map((button) => (button.textContent || "").replace(/\s+/g, " ").trim())
         .filter((text) => text.length > 1 && text.length <= 80 && !/^(log\s*out|sign\s*out|logout)$/i.test(text));
@@ -598,21 +628,25 @@ async function discoverMenuPages(page: Page, origin: string, seen: Set<string>) 
     const next = labels.find((label) => !clicked.has(label));
     if (!next) break;
     clicked.add(next);
-
-    const button = page
-      .locator("aside button, nav button")
-      .filter({ has: page.getByText(next, { exact: true }) })
-      .first();
-    if ((await button.count()) === 0) continue;
     const before = page.url();
-    await button.click({ timeout: 3_000 }).catch(() => undefined);
-    await page
-      .waitForFunction((previous) => location.href !== previous, before, { timeout: 2_500 })
-      .catch(() => undefined);
-    await waitForContent(page);
-    const normalized = normalizePageUrl(page.url(), page.url(), origin);
-    if (!normalized || seen.has(normalized) || found.has(normalized)) continue;
-    found.set(normalized, next);
+    const clickedButton = await page.evaluate((label) => {
+      const buttons = [...document.querySelectorAll("aside button, nav button, .ant-layout-sider button")];
+      const match = buttons.find((button) => (button.textContent || "").replace(/\s+/g, " ").trim() === label);
+      if (!match) return false;
+      match.scrollIntoView({ block: "center" });
+      if (match instanceof HTMLElement) match.click();
+      return true;
+    }, next);
+    if (!clickedButton) continue;
+    const moved = await page
+      .waitForFunction((previous) => location.href !== previous, before, { timeout: 600 })
+      .then(() => true)
+      .catch(() => false);
+    if (moved) {
+      const normalized = normalizePageUrl(page.url(), page.url(), origin);
+      if (normalized && !seen.has(normalized) && !found.has(normalized)) found.set(normalized, next);
+    }
+    await collect();
   }
 
   return [...found.entries()].map(([url, name]) => ({ url, name }));

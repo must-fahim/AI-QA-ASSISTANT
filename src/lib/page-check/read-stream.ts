@@ -36,11 +36,13 @@ const BATCH_LIMIT = 8;
 export async function readPageCheckBatches(
   requestBatch: (resume: PageCheckResume | null) => Promise<Response>,
   onEvent: (event: PageCheckEvent) => void,
+  signal?: AbortSignal,
 ) {
   let resume: PageCheckResume | null = null;
   let previousKey = "";
   let repeats = 0;
   for (let batch = 0; batch < BATCH_LIMIT; batch += 1) {
+    if (signal?.aborted) throw new DOMException("The check was stopped.", "AbortError");
     const response = await requestBatch(resume);
     if (!response.ok || !response.body) throw await readFailedResponse(response);
     const found: { resume: PageCheckResume | null } = { resume: null };
