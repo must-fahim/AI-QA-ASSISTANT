@@ -131,8 +131,10 @@ export function PageCheckView() {
       {check.running || check.rows.length > 0 || check.summary ? (
         <PageResultList
           rows={check.rows}
+          running={check.running}
           summary={check.summary}
           empty={check.summary ? "No pages were loaded before the check stopped." : "Each page appears here while it loads."}
+          scrollable
         />
       ) : null}
       <SaveTestPanel siteUrl={siteUrlForSave(form.watch("siteUrl"), checkedSiteUrl)} rows={check.rows} running={check.running} />

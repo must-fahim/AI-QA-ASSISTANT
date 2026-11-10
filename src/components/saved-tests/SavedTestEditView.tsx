@@ -178,7 +178,7 @@ export function SavedTestEditView() {
         {review.error ? <div className="mt-3"><Alert type="error" showIcon title={review.error} /></div> : null}
         {review.rows.length > 0 || review.running ? (
           <div className="mt-4 flex min-h-0 flex-1 flex-col">
-            <PageResultList rows={review.rows} summary={review.summary} empty="Discovered pages will appear here." embedded scrollable />
+            <PageResultList rows={review.rows} running={review.running} summary={review.summary} empty="Discovered pages will appear here." embedded scrollable />
           </div>
         ) : null}
       </Modal>

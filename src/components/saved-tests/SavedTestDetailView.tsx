@@ -211,7 +211,7 @@ export function SavedTestDetailView() {
               Checking the {test.pageCount} saved pages. Discovery does not run again.
             </p>
             {retest.error ? <Alert type="error" showIcon title={retest.error} /> : null}
-            <PageResultList rows={retest.rows} summary={retest.summary} empty="Saved pages will appear here while they load." embedded scrollable />
+            <PageResultList rows={retest.rows} running={retest.running} summary={retest.summary} empty="Saved pages will appear here while they load." embedded scrollable />
           </div>
         ) : (
           <>
