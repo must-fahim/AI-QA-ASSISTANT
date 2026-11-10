@@ -40,7 +40,6 @@ export function normalizeSavedPageUrl(siteUrl: string, raw: string) {
     throw new PageListError("Page URLs must stay on the same website.");
   }
 
-  page.hash = "";
   if (page.pathname.length > 1 && page.pathname.endsWith("/")) {
     page.pathname = page.pathname.slice(0, -1);
   }
@@ -99,31 +98,44 @@ export function pagesFromCheckRows(
   siteUrl: string,
   rows: Array<{ name: string; path: string; url: string; state: string }>,
 ) {
-  const drafts: SavedPageDraft[] = [];
-  for (const row of rows) {
-    if (row.state !== "loaded" && row.state !== "failed") continue;
-    if (row.url.includes("#detail")) continue;
-    const path = row.path.startsWith("/") ? row.path : "/";
-    drafts.push({
-      name: row.name,
-      url: path,
-      source: "discovered",
-      lastStatus: row.state,
-    });
-  }
-
   const seen = new Set<string>();
   const unique: SavedPageDraft[] = [];
-  for (const page of drafts) {
+  for (const row of rows) {
+    if (row.state !== "loaded" && row.state !== "failed") continue;
+    const name = row.name.replace(/\s+/g, " ").trim();
+    if (!name) continue;
     let url: string;
     try {
-      url = normalizeSavedPageUrl(siteUrl, page.url);
+      url = normalizeSavedPageUrl(siteUrl, checkRowAddress(row));
     } catch {
       continue;
     }
-    if (seen.has(url)) continue;
+    url = distinctSavedUrl(url, seen);
     seen.add(url);
-    unique.push({ ...page, url });
+    unique.push({
+      name,
+      url,
+      source: "discovered",
+      lastStatus: row.state === "failed" ? "failed" : "loaded",
+    });
   }
   return unique;
+}
+
+function checkRowAddress(row: { path: string; url: string }) {
+  if (row.url.includes("#")) return row.url;
+  if (row.path.startsWith("/")) return row.path;
+  return row.url || "/";
+}
+
+function distinctSavedUrl(url: string, seen: Set<string>) {
+  if (!seen.has(url)) return url;
+  const parsed = new URL(url);
+  const baseHash = parsed.hash.replace(/^#/, "");
+  let count = 2;
+  while (seen.has(parsed.toString())) {
+    parsed.hash = baseHash ? `${baseHash}-${count}` : String(count);
+    count += 1;
+  }
+  return parsed.toString();
 }
