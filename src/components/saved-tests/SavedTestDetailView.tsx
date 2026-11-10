@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, App, Button, Input, Modal, Tag } from "antd";
+import { Alert, App, Button, Input, Modal } from "antd";
 import { ArrowLeft, Check, ChevronDown, Pencil, Play, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -9,7 +9,7 @@ import { toast } from "react-toastify";
 import { PageResultList } from "@/components/page-check/PageResultList";
 import { apiFetch } from "@/lib/api/client";
 import { formatTimestamp } from "@/lib/format";
-import { runSavedRetest, takeQueuedRetest, useRetestState } from "@/lib/saved-tests/retest-store";
+import { runSavedRetest, stopSavedRetest, takeQueuedRetest, useRetestState } from "@/lib/saved-tests/retest-store";
 import type { SavedPageRecord, SavedTestRecord } from "@/types/saved-tests";
 
 export function SavedTestDetailView() {
@@ -118,10 +118,20 @@ export function SavedTestDetailView() {
           <ArrowLeft size={16} aria-hidden />
           Saved tests
         </Link>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="primary" icon={<Play size={16} />} loading={retest.running} onClick={openRetest}>
             Retest
           </Button>
+          {retest.running ? (
+            <button
+              type="button"
+              onClick={() => stopSavedRetest(id)}
+              className="inline-flex h-8 items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-4 text-sm font-medium text-[#1c1c1c] transition-colors hover:border-[#f87171] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+            >
+              <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
+              Stop retest
+            </button>
+          ) : null}
           <Link href={`/saved-tests/${id}/edit`}>
             <Button icon={<Pencil size={16} />}>Edit</Button>
           </Link>
@@ -178,16 +188,25 @@ export function SavedTestDetailView() {
         width={640}
         onCancel={closeRetest}
         footer={
-          showResults
-            ? [
-                <Button key="again" type="primary" icon={<Play size={16} />} disabled={retest.running} onClick={startRetest}>
+          showResults ? (
+            <div className="flex items-center justify-end gap-2">
+              {retest.running ? (
+                <button
+                  type="button"
+                  onClick={() => stopSavedRetest(id)}
+                  className="inline-flex h-8 items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-4 text-sm font-medium text-[#1c1c1c] transition-colors hover:border-[#f87171] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+                >
+                  <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
+                  Stop retest
+                </button>
+              ) : (
+                <Button type="primary" icon={<Play size={16} />} onClick={startRetest}>
                   Retest again
-                </Button>,
-                <Button key="close" onClick={closeRetest}>
-                  {retest.running ? "Hide" : "Close"}
-                </Button>,
-              ]
-            : undefined
+                </Button>
+              )}
+              <Button onClick={closeRetest}>{retest.running ? "Hide" : "Close"}</Button>
+            </div>
+          ) : undefined
         }
         okText="Start retest"
         onOk={startRetest}
@@ -199,7 +218,7 @@ export function SavedTestDetailView() {
               Checking the {test.pageCount} saved pages. Discovery does not run again.
             </p>
             {retest.error ? <Alert type="error" showIcon title={retest.error} /> : null}
-            <PageResultList rows={retest.rows} summary={retest.summary} empty="Saved pages will appear here while they load." embedded scrollable />
+            <PageResultList rows={retest.rows} running={retest.running} summary={retest.summary} empty="Saved pages will appear here while they load." embedded scrollable />
           </div>
         ) : (
           <>
@@ -243,13 +262,21 @@ function PageRow({ page, index }: { page: SavedPageRecord; index: number }) {
   return (
     <li className="flex items-center justify-between gap-3 border-t border-[#f3f4f6] py-3">
       <div className="flex min-w-0 items-start gap-3">
-        <span className="mt-0.5 w-6 shrink-0 text-xs text-[#9ca3af]">{index}</span>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-sm font-medium text-[#1c1c1c]">{page.name}</p>
-            <Tag color={page.source === "manual" ? "purple" : "default"}>{page.source === "manual" ? "Added" : "Discovered"}</Tag>
+        <span className="flex h-5 w-6 shrink-0 items-center text-xs text-[#9ca3af]">{index}</span>
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="m-0 truncate text-sm font-medium leading-5 text-[#1c1c1c]">{page.name}</p>
+            <span
+              className={`inline-flex h-5 shrink-0 items-center rounded border px-1.5 text-xs leading-none ${
+                page.source === "manual"
+                  ? "border-[#d3adf7] bg-[#f9f0ff] text-[#531dab]"
+                  : "border-[#d9d9d9] bg-[#fafafa] text-[#1c1c1c]"
+              }`}
+            >
+              {page.source === "manual" ? "Added" : "Discovered"}
+            </span>
           </div>
-          <p className="truncate text-xs text-[#6b7280]">{path}</p>
+          <p className="m-0 truncate text-xs leading-4 text-[#6b7280]">{path}</p>
         </div>
       </div>
       <PageStatus status={page.lastStatus} />

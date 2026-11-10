@@ -30,17 +30,28 @@ export const POST = withErrorHandling(async (request: Request, context: RetestCo
   await assertPublicHttpUrl(saved.siteUrl);
 
   return ndjsonResponse(async (emit) => {
+    const done = new Set(input.doneUrls ?? []);
     const outcome = await retestSavedPages(
       {
         siteUrl: saved.siteUrl,
         loginEmail: input.loginEmail,
         loginPassword: input.loginPassword,
-        pages: saved.pages.map((page) => ({ name: page.name, url: page.url })),
+        pages: saved.pages
+          .filter((page) => !done.has(page.url))
+          .map((page) => ({ name: page.name, url: page.url })),
+        doneUrls: input.doneUrls,
+        checked: input.checked,
+        failed: input.failed,
       },
       emit,
       (result) => markSavedTestRun(id, [result], user.id).then(() => undefined),
     );
-    await markSavedTestRun(id, outcome.results, user.id);
-    logger.info("saved page retest stored", { testId: id, checked: outcome.checked, failed: outcome.failed });
+    if (outcome.results.length > 0) await markSavedTestRun(id, outcome.results, user.id);
+    logger.info("saved page retest stored", {
+      testId: id,
+      checked: outcome.checked,
+      failed: outcome.failed,
+      continued: outcome.continued,
+    });
   });
 });

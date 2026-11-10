@@ -1,8 +1,8 @@
 "use client";
 
-import { Button, Input, Modal, Tag } from "antd";
+import { App, Button, Input, Modal } from "antd";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageListError, normalizeSavedPageUrl, type SavedPageDraft } from "@/lib/saved-tests/pages";
 
 export interface DraftPage extends SavedPageDraft {
@@ -14,25 +14,48 @@ export function PageEditor({
   pages,
   onChange,
   lockDiscovered = false,
+  disabled = false,
+  scrollable = false,
 }: {
   siteUrl: string;
   pages: DraftPage[];
   onChange: (pages: DraftPage[]) => void;
   lockDiscovered?: boolean;
+  disabled?: boolean;
+  scrollable?: boolean;
 }) {
-  const [draft, setDraft] = useState<{ key: string | null; name: string; url: string } | null>(null);
+  const { modal } = App.useApp();
+  const listRef = useRef<HTMLUListElement>(null);
+  const [draft, setDraft] = useState<{ key: string | null; name: string; url: string; lockUrl: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const discovered = pages.filter((page) => page.source === "discovered").length;
   const manual = pages.length - discovered;
 
+  useEffect(() => {
+    if (!scrollable) return;
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollTo({ top: list.scrollHeight, behavior: "auto" });
+  }, [scrollable, pages.length]);
+
   function openAdd() {
     setError(null);
-    setDraft({ key: null, name: "", url: "" });
+    setDraft({ key: null, name: "", url: "", lockUrl: false });
   }
 
   function openEdit(page: DraftPage) {
     setError(null);
-    setDraft({ key: page.key, name: page.name, url: page.url });
+    setDraft({ key: page.key, name: page.name, url: page.url, lockUrl: lockDiscovered && page.source === "discovered" });
+  }
+
+  function removePage(page: DraftPage) {
+    modal.confirm({
+      title: `Delete ${page.name}?`,
+      content: "This removes the page from the list.",
+      okText: "Delete",
+      okButtonProps: { danger: true },
+      onOk: () => onChange(pages.filter((item) => item.key !== page.key)),
+    });
   }
 
   function saveDraft() {
@@ -42,14 +65,19 @@ export function PageEditor({
       setError("Enter a page name.");
       return;
     }
+    if (!draft.lockUrl && !draft.url.trim()) {
+      setError("Enter a page URL.");
+      return;
+    }
+    const existing = draft.key ? pages.find((page) => page.key === draft.key) : undefined;
     try {
-      const normalized = normalizeSavedPageUrl(siteUrl, draft.url);
+      const normalized = draft.lockUrl && existing ? existing.url : normalizeSavedPageUrl(siteUrl, draft.url);
       if (pages.some((page) => page.key !== draft.key && page.url === normalized)) {
         setError("That page URL is already in the list.");
         return;
       }
-      if (draft.key) {
-        onChange(pages.map((page) => (page.key === draft.key ? { ...page, name: nextName, url: normalized } : page)));
+      if (existing) {
+        onChange(pages.map((page) => (page.key === existing.key ? { ...page, name: nextName, url: normalized } : page)));
       } else {
         onChange([...pages, { key: crypto.randomUUID(), name: nextName, url: normalized, source: "manual", lastStatus: null }]);
       }
@@ -66,39 +94,41 @@ export function PageEditor({
         <p className="text-xs text-[#6b7280]">
           Discovered {discovered} · Added {manual} · Total {pages.length}
         </p>
-        <Button icon={<Plus size={16} />} onClick={openAdd}>
+        <Button icon={<Plus size={16} />} onClick={openAdd} disabled={disabled || !siteUrl}>
           Add page
         </Button>
       </div>
-      <ul className="flex flex-col">
-        {pages.map((page) => {
-          const locked = lockDiscovered && page.source === "discovered";
-          return (
-            <li key={page.key} className="flex items-center justify-between gap-3 border-t border-[#f3f4f6] py-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-sm font-medium text-[#1c1c1c]">{page.name}</p>
-                  <Tag color={page.source === "manual" ? "purple" : "default"}>
-                    {page.source === "manual" ? "Added" : "Discovered"}
-                  </Tag>
-                </div>
-                <p className="truncate text-xs text-[#6b7280]">{pagePath(page.url)}</p>
+      <ul ref={listRef} className={scrollable ? "custom-scrollbar-with-spacing flex max-h-80 flex-col overflow-y-auto" : "flex flex-col"}>
+        {pages.map((page) => (
+          <li key={page.key} className="flex items-center justify-between gap-3 border-t border-[#f3f4f6] py-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="m-0 truncate text-sm font-medium leading-5 text-[#1c1c1c]">{page.name}</p>
+                <span
+                  className={`inline-flex h-5 shrink-0 items-center rounded border px-1.5 text-xs leading-none ${
+                    page.source === "manual"
+                      ? "border-[#d3adf7] bg-[#f9f0ff] text-[#531dab]"
+                      : "border-[#d9d9d9] bg-[#fafafa] text-[#1c1c1c]"
+                  }`}
+                >
+                  {page.source === "manual" ? "Added" : "Discovered"}
+                </span>
               </div>
-              {locked ? null : (
-                <div className="flex shrink-0">
-                  <Button type="text" aria-label={`Edit ${page.name}`} icon={<Pencil size={16} />} onClick={() => openEdit(page)} />
-                  <Button
-                    type="text"
-                    danger
-                    aria-label={`Remove ${page.name}`}
-                    icon={<Trash2 size={16} />}
-                    onClick={() => onChange(pages.filter((item) => item.key !== page.key))}
-                  />
-                </div>
-              )}
-            </li>
-          );
-        })}
+              <p className="truncate text-xs text-[#6b7280]">{pagePath(page.url)}</p>
+            </div>
+            <div className="flex shrink-0">
+              <Button type="text" aria-label={`Edit ${page.name}`} icon={<Pencil size={16} />} disabled={disabled} onClick={() => openEdit(page)} />
+              <Button
+                type="text"
+                danger
+                aria-label={`Delete ${page.name}`}
+                icon={<Trash2 size={16} />}
+                disabled={disabled}
+                onClick={() => removePage(page)}
+              />
+            </div>
+          </li>
+        ))}
       </ul>
       {pages.length === 0 ? <p className="text-sm text-[#6b7280]">No pages yet.</p> : null}
       <Modal
@@ -111,20 +141,31 @@ export function PageEditor({
       >
         <p className="mb-3 text-sm text-[#6b7280]">Use a full URL or a path on this website, such as /pricing.</p>
         <div className="flex flex-col gap-3">
-          <Input
-            value={draft?.name ?? ""}
-            placeholder="Page name"
-            aria-label="Page name"
-            onChange={(event) => setDraft((current) => (current ? { ...current, name: event.target.value } : current))}
-            onPressEnter={saveDraft}
-          />
-          <Input
-            value={draft?.url ?? ""}
-            placeholder="https://example.com/pricing or /pricing"
-            aria-label="Page URL"
-            onChange={(event) => setDraft((current) => (current ? { ...current, url: event.target.value } : current))}
-            onPressEnter={saveDraft}
-          />
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-[#374151]">
+              Page name <span className="text-[#cf1322]">*</span>
+            </span>
+            <Input
+              value={draft?.name ?? ""}
+              placeholder="Page name"
+              aria-label="Page name"
+              onChange={(event) => setDraft((current) => (current ? { ...current, name: event.target.value } : current))}
+              onPressEnter={saveDraft}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-[#374151]">
+              Page URL <span className="text-[#cf1322]">*</span>
+            </span>
+            <Input
+              value={draft?.url ?? ""}
+              placeholder="https://example.com/pricing or /pricing"
+              aria-label="Page URL"
+              disabled={Boolean(draft?.lockUrl)}
+              onChange={(event) => setDraft((current) => (current ? { ...current, url: event.target.value } : current))}
+              onPressEnter={saveDraft}
+            />
+          </label>
           {error ? <p className="text-xs text-[#cf1322]">{error}</p> : null}
         </div>
       </Modal>

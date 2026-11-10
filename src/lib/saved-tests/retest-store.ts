@@ -7,7 +7,7 @@ import {
   emptyCheckState,
   type CheckState,
 } from "@/lib/page-check/rows";
-import { failOpenRows, readFailedResponse, readPageCheckStream } from "@/lib/page-check/read-stream";
+import { failOpenRows, readPageCheckBatches } from "@/lib/page-check/read-stream";
 
 interface RetestLogin {
   loginEmail?: string;
@@ -18,6 +18,7 @@ const EMPTY_STATE = emptyCheckState();
 const states = new Map<string, CheckState>();
 const listeners = new Map<string, Set<() => void>>();
 const queued = new Map<string, RetestLogin>();
+const controllers = new Map<string, AbortController>();
 
 function current(id: string) {
   return states.get(id) ?? EMPTY_STATE;
@@ -51,28 +52,53 @@ export function useRetestState(id: string) {
   );
 }
 
+export function stopSavedRetest(id: string) {
+  controllers.get(id)?.abort();
+}
+
 export async function runSavedRetest(id: string, login: RetestLogin) {
   if (current(id).running) return;
+  const controller = new AbortController();
+  controllers.set(id, controller);
   update(id, () => ({ ...emptyCheckState(), running: true }));
+  let stopped = false;
   try {
-    const response = await fetch(`/api/saved-tests/${id}/retest`, {
-      method: "POST",
-      headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
-      body: JSON.stringify({
-        loginEmail: login.loginEmail || undefined,
-        loginPassword: login.loginPassword || undefined,
-      }),
-    });
-    if (!response.ok || !response.body) throw await readFailedResponse(response);
-    await readPageCheckStream(response, (event) => {
-      update(id, (state) => applyPageCheckEvent({ ...state, running: true }, event));
-    });
+    await readPageCheckBatches(
+      (resume) =>
+        fetch(`/api/saved-tests/${id}/retest`, {
+          method: "POST",
+          headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
+          body: JSON.stringify({
+            loginEmail: login.loginEmail || undefined,
+            loginPassword: login.loginPassword || undefined,
+            doneUrls: resume?.doneUrls,
+            checked: resume?.checked,
+            failed: resume?.failed,
+          }),
+          signal: controller.signal,
+        }),
+      (event) => {
+        update(id, (state) => applyPageCheckEvent({ ...state, running: true }, event));
+      },
+      controller.signal,
+    );
   } catch (error) {
+    if (controller.signal.aborted) {
+      stopped = true;
+      update(id, (state) => ({
+        ...state,
+        error: null,
+        rows: state.rows.filter((row) => row.state !== "loading"),
+        summary: "Retest stopped.",
+      }));
+      return;
+    }
     const message = error instanceof Error ? error.message : "The retest could not be completed.";
     update(id, (state) => failOpenRows(state, message));
   } finally {
+    if (controllers.get(id) === controller) controllers.delete(id);
     update(id, (state) => ({ ...state, running: false }));
-    notifyRetest(current(id));
+    if (!stopped) notifyRetest(current(id));
   }
 }
 

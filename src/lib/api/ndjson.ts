@@ -6,8 +6,17 @@ export function ndjsonResponse(run: (emit: (event: PageCheckEvent) => void) => P
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false;
       const emit = (event: PageCheckEvent) => {
-        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        } catch (error) {
+          closed = true;
+          logger.error("page check stream closed", {
+            message: error instanceof Error ? error.message.slice(0, 300) : "stream closed",
+          });
+        }
       };
       try {
         await run(emit);
@@ -20,7 +29,14 @@ export function ndjsonResponse(run: (emit: (event: PageCheckEvent) => void) => P
         });
         emit({ type: "error", message });
       } finally {
-        controller.close();
+        if (!closed) {
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            closed = true;
+          }
+        }
       }
     },
   });

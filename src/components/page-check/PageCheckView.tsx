@@ -3,44 +3,63 @@
 import { yupResolver } from "@hookform/resolvers/yup";
 import { Alert, Button, Input } from "antd";
 import { ScanSearch } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { PageResultList } from "@/components/page-check/PageResultList";
 import { SaveTestPanel } from "@/components/page-check/SaveTestPanel";
 import { applyPageCheckEvent, emptyCheckState, type CheckState } from "@/lib/page-check/rows";
-import { failOpenRows, readFailedResponse, readPageCheckStream } from "@/lib/page-check/read-stream";
+import { failOpenRows, readPageCheckBatches } from "@/lib/page-check/read-stream";
 import { pageCheckFormSchema, type PageCheckFormValues } from "@/schemas/page-check-form";
 
 export function PageCheckView() {
   const [check, setCheck] = useState<CheckState>(emptyCheckState());
-  const [checkId, setCheckId] = useState(0);
   const [checkedSiteUrl, setCheckedSiteUrl] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
   const form = useForm<PageCheckFormValues>({
     resolver: yupResolver(pageCheckFormSchema),
     defaultValues: { siteUrl: "", loginEmail: "", loginPassword: "" },
   });
 
+  function stopCheck() {
+    abortRef.current?.abort();
+  }
+
   async function onSubmit(values: PageCheckFormValues) {
-    setCheckId((current) => current + 1);
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setCheckedSiteUrl(values.siteUrl);
     setCheck({ ...emptyCheckState(), running: true });
 
     try {
-      const response = await fetch("/api/page-check", {
-        method: "POST",
-        headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
-        body: JSON.stringify({
-          siteUrl: values.siteUrl,
-          loginEmail: values.loginEmail || undefined,
-          loginPassword: values.loginPassword || undefined,
-        }),
-      });
-
-      if (!response.ok || !response.body) throw await readFailedResponse(response);
-      await readPageCheckStream(response, (event) => {
-        setCheck((state) => applyPageCheckEvent(state, event));
-      });
+      await readPageCheckBatches(
+        (resume) =>
+          fetch("/api/page-check", {
+            method: "POST",
+            headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
+            body: JSON.stringify({
+              siteUrl: values.siteUrl,
+              loginEmail: values.loginEmail || undefined,
+              loginPassword: values.loginPassword || undefined,
+              resume: resume ?? undefined,
+            }),
+            signal: controller.signal,
+          }),
+        (event) => {
+          setCheck((state) => applyPageCheckEvent(state, event));
+        },
+        controller.signal,
+      );
     } catch (caught) {
+      if (controller.signal.aborted) {
+        setCheck((state) => ({
+          ...state,
+          error: null,
+          rows: state.rows.filter((row) => row.state !== "loading"),
+          summary: "Check stopped. You can add pages or save the list.",
+        }));
+        return;
+      }
       const message = caught instanceof Error ? caught.message : "The page check could not be completed.";
       setCheck((state) => failOpenRows(state, message));
     } finally {
@@ -53,8 +72,7 @@ export function PageCheckView() {
       <section className="rounded-lg border border-[#e5e7eb] bg-white p-4 shadow-sm">
         <h2 className="mb-1 text-sm font-semibold">Check page loads</h2>
         <p className="mb-4 text-xs text-[#6b7280]">
-          Opens the site, signs in when you provide a login, then visits each page. A detail opens from a row, a View link, or a View or Details action.
-          The password is used for this check only and is not saved.
+          Check the site, or skip the check and add pages yourself in Save test. The password is used for this check only and is not saved.
         </p>
         <form className="flex flex-col gap-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <Controller
@@ -91,25 +109,48 @@ export function PageCheckView() {
               )}
             />
           </div>
-          <div>
-            <Button type="primary" htmlType="submit" size="large" loading={check.running} icon={<ScanSearch size={16} />}>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="primary" htmlType="submit" size="large" loading={check.running} disabled={check.running} icon={<ScanSearch size={16} />}>
               Check pages
             </Button>
+            {check.running ? (
+              <button
+                type="button"
+                onClick={stopCheck}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-4 text-sm font-medium text-[#1c1c1c] transition-colors hover:border-[#f87171] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+              >
+                <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
+                Stop check
+              </button>
+            ) : null}
           </div>
         </form>
       </section>
 
       {check.error ? <Alert type="error" title={check.error} showIcon /> : null}
-      <PageResultList rows={check.rows} summary={check.summary} empty="Each page appears here while it loads." />
-      <SaveTestPanel
-        siteUrl={checkedSiteUrl}
-        rows={check.rows}
-        checkId={checkId}
-        running={check.running}
-        finished={Boolean(check.summary)}
-      />
+      {check.running || check.rows.length > 0 || check.summary ? (
+        <PageResultList
+          rows={check.rows}
+          running={check.running}
+          summary={check.summary}
+          empty={check.summary ? "No pages were loaded before the check stopped." : "Each page appears here while it loads."}
+          scrollable
+        />
+      ) : null}
+      <SaveTestPanel siteUrl={siteUrlForSave(form.watch("siteUrl"), checkedSiteUrl)} rows={check.rows} running={check.running} />
     </div>
   );
+}
+
+function siteUrlForSave(typed: string, checked: string) {
+  const candidate = typed.trim() || checked.trim();
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
 
 function Field({

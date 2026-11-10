@@ -10,7 +10,7 @@ import { PageResultList } from "@/components/page-check/PageResultList";
 import { PageEditor, type DraftPage } from "@/components/saved-tests/PageEditor";
 import { ApiClientError, apiFetch } from "@/lib/api/client";
 import { applyPageCheckEvent, emptyCheckState, type CheckState } from "@/lib/page-check/rows";
-import { failOpenRows, readFailedResponse, readPageCheckStream } from "@/lib/page-check/read-stream";
+import { failOpenRows, readPageCheckBatches } from "@/lib/page-check/read-stream";
 import { PageListError, mergeDiscoveredPages, pagesFromCheckRows, uniquePages } from "@/lib/saved-tests/pages";
 import type { SavedTestRecord } from "@/types/saved-tests";
 
@@ -70,19 +70,22 @@ export function SavedTestEditView() {
   async function regenerate() {
     setReview({ ...emptyCheckState(), running: true });
     try {
-      const response = await fetch("/api/page-check", {
-        method: "POST",
-        headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
-        body: JSON.stringify({
-          siteUrl,
-          loginEmail: email || undefined,
-          loginPassword: password || undefined,
-        }),
-      });
-      if (!response.ok || !response.body) throw await readFailedResponse(response);
-      await readPageCheckStream(response, (event) => {
-        setReview((state) => applyPageCheckEvent(state, event));
-      });
+      await readPageCheckBatches(
+        (resume) =>
+          fetch("/api/page-check", {
+            method: "POST",
+            headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
+            body: JSON.stringify({
+              siteUrl,
+              loginEmail: email || undefined,
+              loginPassword: password || undefined,
+              resume: resume ?? undefined,
+            }),
+          }),
+        (event) => {
+          setReview((state) => applyPageCheckEvent(state, event));
+        },
+      );
     } catch (caught) {
       setReview((state) => failOpenRows(state, messageFrom(caught, "Pages could not be discovered again.")));
     } finally {
@@ -106,13 +109,13 @@ export function SavedTestEditView() {
   if (error && pages.length === 0) return <Alert type="error" showIcon title={error} />;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href={`/saved-tests/${id}`} className="inline-flex items-center gap-1 text-sm text-[#6b7280] hover:text-[#712DC8]">
+    <div className="mx-auto flex max-w-3xl flex-col">
+      <div className="sticky top-0 z-10 flex flex-nowrap items-center justify-between gap-3 bg-[#f5f5f7] pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-[#f5f5f7] before:content-['']">
+        <Link href={`/saved-tests/${id}`} className="inline-flex shrink-0 items-center gap-1 text-sm text-[#6b7280] hover:text-[#712DC8]">
           <ArrowLeft size={16} aria-hidden />
           Back to view
         </Link>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-nowrap gap-2">
           <Button icon={<RefreshCw size={16} />} onClick={() => setRegenerateOpen(true)}>
             Regenerate pages
           </Button>
@@ -122,6 +125,7 @@ export function SavedTestEditView() {
         </div>
       </div>
 
+      <div className="flex flex-col gap-4">
       <section className="rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-sm font-semibold">Website</h2>
         <div className="grid gap-4">
@@ -139,8 +143,9 @@ export function SavedTestEditView() {
       <section className="rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm">
         <h2 className="mb-1 text-sm font-semibold">Pages</h2>
         <p className="mb-4 text-xs text-[#6b7280]">Change names and URLs, or add a page the check did not find.</p>
-        <PageEditor siteUrl={siteUrl} pages={pages} onChange={setPages} />
+        <PageEditor siteUrl={siteUrl} pages={pages} onChange={setPages} scrollable />
       </section>
+      </div>
 
       <Modal
         title="Regenerate pages"
@@ -175,7 +180,7 @@ export function SavedTestEditView() {
         {review.error ? <div className="mt-3"><Alert type="error" showIcon title={review.error} /></div> : null}
         {review.rows.length > 0 || review.running ? (
           <div className="mt-4 flex min-h-0 flex-1 flex-col">
-            <PageResultList rows={review.rows} summary={review.summary} empty="Discovered pages will appear here." embedded scrollable />
+            <PageResultList rows={review.rows} running={review.running} summary={review.summary} empty="Discovered pages will appear here." embedded scrollable />
           </div>
         ) : null}
       </Modal>

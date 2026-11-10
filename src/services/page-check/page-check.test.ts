@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { batchExpired, PAGE_CHECK_BATCH_MS } from "@/services/page-check/batch";
 import { classifyPageLoad } from "@/services/page-check/classify-page";
 import {
   isActionMenuName,
@@ -9,11 +10,20 @@ import {
   nextPageLinks,
   normalizePageUrl,
   allowSimilarPage,
+  detailPageName,
   pageLabel,
   pageShape,
 } from "@/services/page-check/links";
 
 const origin = "https://stg.example.com";
+
+describe("page check batches", () => {
+  it("keeps going until the batch window is over", () => {
+    const startedAt = 1_000;
+    expect(batchExpired(startedAt, startedAt + PAGE_CHECK_BATCH_MS - 1)).toBe(false);
+    expect(batchExpired(startedAt, startedAt + PAGE_CHECK_BATCH_MS)).toBe(true);
+  });
+});
 
 describe("page check links", () => {
   it("keeps same-site pages and detail pages, and skips logout, files, and other sites", () => {
@@ -36,6 +46,10 @@ describe("page check links", () => {
       `${origin}/campaigns/42`,
     );
     expect(pageLabel(`${origin}/create-campaign`, "Create Campaign")).toBe("Create Campaign");
+    expect(detailPageName("Solo Pay", "time Category Details")).toBe("Solo Pay detail");
+    expect(detailPageName("Advertiser members", "Advertiser Member Management Details")).toBe(
+      "Advertiser Member Management Details",
+    );
     expect(isLoginPath(`${origin}/login`)).toBe(true);
     expect(isLoginPath(`${origin}/dashboard`)).toBe(false);
     expect(

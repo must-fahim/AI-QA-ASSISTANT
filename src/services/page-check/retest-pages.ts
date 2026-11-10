@@ -3,6 +3,7 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { assertPublicHttpUrl } from "@/lib/page-visit/public-url";
 import { closeBrowser, launchChromium, safeMessage, signIn } from "@/services/page-visit/browser";
+import { batchExpired } from "@/services/page-check/batch";
 import { classifyPageLoad, type PageLoadState } from "@/services/page-check/classify-page";
 import { pagePath } from "@/services/page-check/links";
 import type { PageCheckEvent } from "@/services/page-check/types";
@@ -17,12 +18,16 @@ interface RetestInput {
   loginEmail?: string;
   loginPassword?: string;
   pages: RetestPage[];
+  doneUrls?: string[];
+  checked?: number;
+  failed?: number;
 }
 
 export interface RetestOutcome {
   checked: number;
   failed: number;
   results: Array<{ url: string; status: PageLoadState }>;
+  continued: boolean;
 }
 
 export async function retestSavedPages(
@@ -36,6 +41,9 @@ export async function retestSavedPages(
   const browser = await launchChromium();
   const results: RetestOutcome["results"] = [];
   let failed = 0;
+  const priorChecked = input.checked ?? 0;
+  const priorFailed = input.failed ?? 0;
+  const startedAt = Date.now();
 
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -45,6 +53,20 @@ export async function retestSavedPages(
     let signedIn = false;
 
     for (const item of input.pages) {
+      if (batchExpired(startedAt)) {
+        const doneUrls = [...(input.doneUrls ?? []), ...results.map((result) => result.url)];
+        emit({
+          type: "continue",
+          checked: priorChecked + results.length,
+          failed: priorFailed + failed,
+          resume: {
+            checked: priorChecked + results.length,
+            failed: priorFailed + failed,
+            doneUrls,
+          },
+        });
+        return { checked: results.length, failed, results, continued: true };
+      }
       emit({ type: "checking", url: item.url, name: item.name, path: pagePath(item.url) });
       let recorded: { url: string; status: PageLoadState } | null = null;
       try {
@@ -91,9 +113,9 @@ export async function retestSavedPages(
       if (recorded && persist) await persist(recorded);
     }
 
-    logger.info("saved page retest finished", { host: start.host, checked: results.length, failed });
-    emit({ type: "done", checked: results.length, failed, truncated: false });
-    return { checked: results.length, failed, results };
+    logger.info("saved page retest finished", { host: start.host, checked: priorChecked + results.length, failed: priorFailed + failed });
+    emit({ type: "done", checked: priorChecked + results.length, failed: priorFailed + failed, truncated: false });
+    return { checked: results.length, failed, results, continued: false };
   } finally {
     await closeBrowser(browser);
   }

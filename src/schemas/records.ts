@@ -47,6 +47,7 @@ export const generateRequestSchema = z
     pageUrl: z.string().trim().max(2_000).optional(),
     loginEmail: z.string().trim().max(200).optional(),
     loginPassword: z.string().max(200).optional(),
+    step: z.enum(["visit", "generate"]).optional(),
   })
   .superRefine((value, context) => {
     const hasPage = Boolean(value.pageUrl);
