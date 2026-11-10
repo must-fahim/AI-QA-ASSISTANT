@@ -109,13 +109,13 @@ export function SavedTestEditView() {
   if (error && pages.length === 0) return <Alert type="error" showIcon title={error} />;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href={`/saved-tests/${id}`} className="inline-flex items-center gap-1 text-sm text-[#6b7280] hover:text-[#712DC8]">
+    <div className="mx-auto flex max-w-3xl flex-col">
+      <div className="sticky top-0 z-10 flex flex-nowrap items-center justify-between gap-3 bg-[#f5f5f7] pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-[#f5f5f7] before:content-['']">
+        <Link href={`/saved-tests/${id}`} className="inline-flex shrink-0 items-center gap-1 text-sm text-[#6b7280] hover:text-[#712DC8]">
           <ArrowLeft size={16} aria-hidden />
           Back to view
         </Link>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-nowrap gap-2">
           <Button icon={<RefreshCw size={16} />} onClick={() => setRegenerateOpen(true)}>
             Regenerate pages
           </Button>
@@ -125,6 +125,7 @@ export function SavedTestEditView() {
         </div>
       </div>
 
+      <div className="flex flex-col gap-4">
       <section className="rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-sm font-semibold">Website</h2>
         <div className="grid gap-4">
@@ -142,8 +143,9 @@ export function SavedTestEditView() {
       <section className="rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm">
         <h2 className="mb-1 text-sm font-semibold">Pages</h2>
         <p className="mb-4 text-xs text-[#6b7280]">Change names and URLs, or add a page the check did not find.</p>
-        <PageEditor siteUrl={siteUrl} pages={pages} onChange={setPages} />
+        <PageEditor siteUrl={siteUrl} pages={pages} onChange={setPages} scrollable />
       </section>
+      </div>
 
       <Modal
         title="Regenerate pages"

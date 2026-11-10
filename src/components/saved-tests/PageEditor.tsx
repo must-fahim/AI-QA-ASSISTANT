@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Input, Modal, Tag } from "antd";
+import { App, Button, Input, Modal } from "antd";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PageListError, normalizeSavedPageUrl, type SavedPageDraft } from "@/lib/saved-tests/pages";
@@ -65,6 +65,10 @@ export function PageEditor({
       setError("Enter a page name.");
       return;
     }
+    if (!draft.lockUrl && !draft.url.trim()) {
+      setError("Enter a page URL.");
+      return;
+    }
     const existing = draft.key ? pages.find((page) => page.key === draft.key) : undefined;
     try {
       const normalized = draft.lockUrl && existing ? existing.url : normalizeSavedPageUrl(siteUrl, draft.url);
@@ -97,12 +101,18 @@ export function PageEditor({
       <ul ref={listRef} className={scrollable ? "custom-scrollbar-with-spacing flex max-h-80 flex-col overflow-y-auto" : "flex flex-col"}>
         {pages.map((page) => (
           <li key={page.key} className="flex items-center justify-between gap-3 border-t border-[#f3f4f6] py-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-sm font-medium text-[#1c1c1c]">{page.name}</p>
-                <Tag color={page.source === "manual" ? "purple" : "default"}>
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="m-0 truncate text-sm font-medium leading-5 text-[#1c1c1c]">{page.name}</p>
+                <span
+                  className={`inline-flex h-5 shrink-0 items-center rounded border px-1.5 text-xs leading-none ${
+                    page.source === "manual"
+                      ? "border-[#d3adf7] bg-[#f9f0ff] text-[#531dab]"
+                      : "border-[#d9d9d9] bg-[#fafafa] text-[#1c1c1c]"
+                  }`}
+                >
                   {page.source === "manual" ? "Added" : "Discovered"}
-                </Tag>
+                </span>
               </div>
               <p className="truncate text-xs text-[#6b7280]">{pagePath(page.url)}</p>
             </div>
@@ -131,21 +141,31 @@ export function PageEditor({
       >
         <p className="mb-3 text-sm text-[#6b7280]">Use a full URL or a path on this website, such as /pricing.</p>
         <div className="flex flex-col gap-3">
-          <Input
-            value={draft?.name ?? ""}
-            placeholder="Page name"
-            aria-label="Page name"
-            onChange={(event) => setDraft((current) => (current ? { ...current, name: event.target.value } : current))}
-            onPressEnter={saveDraft}
-          />
-          <Input
-            value={draft?.url ?? ""}
-            placeholder="https://example.com/pricing or /pricing"
-            aria-label="Page URL"
-            disabled={Boolean(draft?.lockUrl)}
-            onChange={(event) => setDraft((current) => (current ? { ...current, url: event.target.value } : current))}
-            onPressEnter={saveDraft}
-          />
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-[#374151]">
+              Page name <span className="text-[#cf1322]">*</span>
+            </span>
+            <Input
+              value={draft?.name ?? ""}
+              placeholder="Page name"
+              aria-label="Page name"
+              onChange={(event) => setDraft((current) => (current ? { ...current, name: event.target.value } : current))}
+              onPressEnter={saveDraft}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-[#374151]">
+              Page URL <span className="text-[#cf1322]">*</span>
+            </span>
+            <Input
+              value={draft?.url ?? ""}
+              placeholder="https://example.com/pricing or /pricing"
+              aria-label="Page URL"
+              disabled={Boolean(draft?.lockUrl)}
+              onChange={(event) => setDraft((current) => (current ? { ...current, url: event.target.value } : current))}
+              onPressEnter={saveDraft}
+            />
+          </label>
           {error ? <p className="text-xs text-[#cf1322]">{error}</p> : null}
         </div>
       </Modal>

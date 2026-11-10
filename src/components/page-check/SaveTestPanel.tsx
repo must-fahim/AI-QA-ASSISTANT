@@ -26,6 +26,7 @@ export function SaveTestPanel({
   const [removedUrls, setRemovedUrls] = useState<string[]>([]);
   const [renamed, setRenamed] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState(false);
   const found = siteUrl ? pagesFromCheckRows(siteUrl, rows) : [];
   const discovered = found
     .filter((page) => !removedUrls.includes(page.url))
@@ -59,9 +60,11 @@ export function SaveTestPanel({
   async function save() {
     const website = name.replace(/\s+/g, " ").trim();
     if (!website) {
+      setNameError(true);
       toast.error("Enter a website name.");
       return;
     }
+    setNameError(false);
     try {
       const prepared = uniquePages(siteUrl, pages);
       setSaving(true);
@@ -95,9 +98,14 @@ export function SaveTestPanel({
         <Input
           value={name}
           placeholder="MUST Company"
+          status={nameError ? "error" : ""}
           disabled={saving}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value);
+            if (event.target.value.trim()) setNameError(false);
+          }}
         />
+        {nameError ? <span className="text-xs text-[#cf1322]">Enter a website name.</span> : null}
       </label>
       <h3 className="mb-2 text-sm font-medium">Pages to save</h3>
       {running ? <p className="mb-3 text-xs text-[#6b7280]">Stop the check before adding pages or saving.</p> : null}
