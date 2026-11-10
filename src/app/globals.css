@@ -21,6 +21,11 @@ body {
   font-family: var(--font-geist-sans), sans-serif;
 }
 
+.stable-scrollbar {
+  scrollbar-gutter: stable;
+  overflow-x: hidden;
+}
+
 .custom-scrollbar-with-spacing {
   scrollbar-gutter: stable;
   scrollbar-color: #e2e5ee #ffffff;

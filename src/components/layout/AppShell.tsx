@@ -113,7 +113,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <AccountMenu />
           </div>
         </Header>
-        <Content className="overflow-y-auto p-4 md:p-6">{children}</Content>
+        <Content className="stable-scrollbar overflow-y-auto p-4 md:p-6">{children}</Content>
       </Layout>
     </Layout>
   );
